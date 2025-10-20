@@ -1,0 +1,21 @@
+# Go build artifacts
+/codex-upload
+/codex-download
+/bin/
+/dist/
+/build/
+/out/
+output.bin
+
+# Test binaries and coverage
+*.test
+*.out
+*.coverprofile
+coverage*.txt
+coverage*.out
+
+# OS files
+.DS_Store
+
+# Logs
+*.log
