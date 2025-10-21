@@ -98,3 +98,9 @@ To run the integration test, use `integration` tag and narrow the scope using `-
 ```bash
 go test -v -tags=integration ./communities -run Integration -timeout 15s
 ```
+
+To make sure that the test is actually run and not cached, use `count` option:
+
+```bash
+go test -v -tags=integration ./communities -run Integration -timeout 15s -count 1
+```
