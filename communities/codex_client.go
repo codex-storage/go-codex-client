@@ -78,7 +78,7 @@ func (c *CodexClient) LocalDownload(cid string, output io.Writer) error {
 }
 
 func (c *CodexClient) HasCid(cid string) (bool, error) {
-	url := fmt.Sprintf("%s/api/codex/v1/data/%s/has", c.BaseURL, cid)
+	url := fmt.Sprintf("%s/api/codex/v1/data/%s/exists", c.BaseURL, cid)
 
 	resp, err := c.Client.Get(url)
 	if err != nil {
