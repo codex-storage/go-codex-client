@@ -276,7 +276,7 @@ func TestRemoveCid_Error(t *testing.T) {
 	}
 }
 
-func TestLocalDownloadWithContext_Success(t *testing.T) {
+func TestTriggerDownload(t *testing.T) {
 	const testCid = "zDvZRwzmTestCID"
 	const expectedManifest = `{
 		"cid": "zDvZRwzmTestCID",
@@ -309,7 +309,7 @@ func TestLocalDownloadWithContext_Success(t *testing.T) {
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
-	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestLocalDownloadWithContext_Success(t *testing.T) {
 	}
 }
 
-func TestLocalDownloadWithContext_RequestError(t *testing.T) {
+func TestTriggerDownloadWithContext_RequestError(t *testing.T) {
 	// Create a server and immediately close it to trigger connection error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server.Close()
@@ -337,7 +337,7 @@ func TestLocalDownloadWithContext_RequestError(t *testing.T) {
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
-	manifest, err := client.LocalDownloadWithContext(ctx, "zDvZRwzmTestCID")
+	manifest, err := client.TriggerDownloadWithContext(ctx, "zDvZRwzmRigWseNB7WqmudkKAPgZmrDCE9u5cY4KvCqhRo9Ki")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -346,7 +346,7 @@ func TestLocalDownloadWithContext_RequestError(t *testing.T) {
 	}
 }
 
-func TestLocalDownloadWithContext_JSONParseError(t *testing.T) {
+func TestTriggerDownloadWithContext_JSONParseError(t *testing.T) {
 	const testCid = "zDvZRwzmTestCID"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +361,7 @@ func TestLocalDownloadWithContext_JSONParseError(t *testing.T) {
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
-	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
 	if err == nil {
 		t.Fatal("expected JSON parse error, got nil")
 	}
@@ -373,7 +373,7 @@ func TestLocalDownloadWithContext_JSONParseError(t *testing.T) {
 	}
 }
 
-func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
+func TestTriggerDownloadWithContext_HTTPError(t *testing.T) {
 	const testCid = "zDvZRwzmTestCID"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -386,7 +386,7 @@ func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
-	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
 	if err == nil {
 		t.Fatal("expected error for 404 status, got nil")
 	}
@@ -398,7 +398,7 @@ func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
 	}
 }
 
-func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
+func TestTriggerDownloadWithContext_Cancellation(t *testing.T) {
 	const testCid = "zDvZRwzmTestCID"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -421,12 +421,156 @@ func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
 	if err == nil {
 		t.Fatal("expected cancellation error, got nil")
 	}
 	if manifest != nil {
 		t.Fatalf("expected nil manifest on cancellation, got %v", manifest)
+	}
+	// Accept either canceled or deadline exceeded depending on timing
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		// net/http may wrap the context error; check error string as a fallback
+		es := err.Error()
+		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
+			t.Fatalf("expected context cancellation, got: %v", err)
+		}
+	}
+}
+
+func TestLocalDownload(t *testing.T) {
+	testData := []byte("test data for local download")
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request method and path
+		if r.Method != "GET" {
+			t.Errorf("Expected GET request, got %s", r.Method)
+		}
+		expectedPath := "/api/codex/v1/data/" + testCid
+		if r.URL.Path != expectedPath {
+			t.Errorf("Expected path %s, got %s", expectedPath, r.URL.Path)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	var buf bytes.Buffer
+	err := client.LocalDownload(testCid, &buf)
+	if err != nil {
+		t.Fatalf("LocalDownload failed: %v", err)
+	}
+
+	if !bytes.Equal(buf.Bytes(), testData) {
+		t.Errorf("Downloaded data mismatch. Expected %q, got %q", string(testData), buf.String())
+	}
+}
+
+func TestLocalDownloadWithContext_Success(t *testing.T) {
+	testData := []byte("test data for local download with context")
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Verify request method and path
+		if r.Method != "GET" {
+			t.Errorf("Expected GET request, got %s", r.Method)
+		}
+		expectedPath := "/api/codex/v1/data/" + testCid
+		if r.URL.Path != expectedPath {
+			t.Errorf("Expected path %s, got %s", expectedPath, r.URL.Path)
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Write(testData)
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	err := client.LocalDownloadWithContext(ctx, testCid, &buf)
+	if err != nil {
+		t.Fatalf("LocalDownloadWithContext failed: %v", err)
+	}
+
+	if !bytes.Equal(buf.Bytes(), testData) {
+		t.Errorf("Downloaded data mismatch. Expected %q, got %q", string(testData), buf.String())
+	}
+}
+
+func TestLocalDownloadWithContext_RequestError(t *testing.T) {
+	// Create a server and immediately close it to trigger connection error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	err := client.LocalDownloadWithContext(ctx, "zDvZRwzmTestCID", &buf)
+	if err == nil {
+		t.Fatal("Expected error due to closed server, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to download from codex") {
+		t.Errorf("Expected 'failed to download from codex' in error, got: %v", err)
+	}
+}
+
+func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("CID not found in local storage"))
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	var buf bytes.Buffer
+	err := client.LocalDownloadWithContext(ctx, testCid, &buf)
+	if err == nil {
+		t.Fatal("Expected error for HTTP 404, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("Expected '404' in error message, got: %v", err)
+	}
+}
+
+func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a slow response
+		time.Sleep(100 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("slow response"))
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	// Create a context with a very short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	var buf bytes.Buffer
+	err := client.LocalDownloadWithContext(ctx, testCid, &buf)
+	if err == nil {
+		t.Fatal("Expected context cancellation error, got nil")
 	}
 	// Accept either canceled or deadline exceeded depending on timing
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {

@@ -18,7 +18,7 @@ A lightweight Go client library for interacting with Codex decentralized storage
 The `CodexClient` type in `communities/codex_client.go` is the central abstraction:
 - Wraps Codex HTTP API (`/api/codex/v1/data/*`) with Go-idiomatic methods
 - Supports both network downloads (`/network/stream`) and local downloads (direct CID access)
-- Context-aware operations for cancellation support (`DownloadWithContext`, `LocalDownloadWithContext`)
+- Context-aware operations for cancellation support (`DownloadWithContext`, `TriggerDownloadWithContext`)
 - All uploads use `application/octet-stream` with `Content-Disposition` header for filenames
 
 ### Data Flow Pattern
@@ -106,13 +106,17 @@ flag.Parse()
 - Unit tests (stdlib) in `communities/codex_client_test.go` cover:
     - Upload success (headers validated) returning CID
     - Download success to a `bytes.Buffer`
+    - HasCid existence checks with JSON parsing
+    - RemoveCid deletion with 204 status validation
+    - TriggerDownload async operations with manifest parsing
+    - LocalDownload direct local storage access
     - Cancellation: streaming handler exits on client cancel; fast and warning-free
 - Run: `go test -v ./communities`
 - Integration test (requires Codex node): `communities/codex_client_integration_test.go`
     - Build tag-gated: run with `go test -v -tags=integration ./communities -run Integration`
     - Env: `CODEX_HOST` (default `localhost`), `CODEX_API_PORT` (default `8080`), optional `CODEX_TIMEOUT_MS`
     - Uses random 1KB payload, logs hex preview, uploads, downloads, and verifies equality
-    - Includes LocalDownload test: uploads→triggers async download→polls HasCid (10s timeout)→verifies content
+    - Includes TriggerDownload test: uploads→triggers async download→polls HasCid (10s timeout)→verifies content
     - All tests use `RemoveCid` cleanup in defer blocks to prevent storage accumulation
 - Debug by observing HTTP responses and Codex node logs; client timeout defaults to 60s
 

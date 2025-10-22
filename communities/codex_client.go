@@ -73,8 +73,8 @@ func (c *CodexClient) Download(cid string, output io.Writer) error {
 	return c.DownloadWithContext(context.Background(), cid, output)
 }
 
-func (c *CodexClient) LocalDownload(cid string) (*CodexManifest, error) {
-	return c.LocalDownloadWithContext(context.Background(), cid)
+func (c *CodexClient) TriggerDownload(cid string) (*CodexManifest, error) {
+	return c.TriggerDownloadWithContext(context.Background(), cid)
 }
 
 func (c *CodexClient) HasCid(cid string) (bool, error) {
@@ -152,6 +152,33 @@ func (c *CodexClient) DownloadWithContext(ctx context.Context, cid string, outpu
 	return c.copyWithContext(ctx, output, resp.Body)
 }
 
+func (c *CodexClient) LocalDownload(cid string, output io.Writer) error {
+	return c.LocalDownloadWithContext(context.Background(), cid, output)
+}
+
+func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string, output io.Writer) error {
+	url := fmt.Sprintf("%s/api/codex/v1/data/%s", c.BaseURL, cid)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to download from codex: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("codex download failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Use context-aware copy for cancellable streaming
+	return c.copyWithContext(ctx, output, resp.Body)
+}
+
 // CodexManifest represents the manifest returned by async download
 type CodexManifest struct {
 	CID      string `json:"cid"`
@@ -165,7 +192,7 @@ type CodexManifest struct {
 	} `json:"manifest"`
 }
 
-func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string) (*CodexManifest, error) {
+func (c *CodexClient) TriggerDownloadWithContext(ctx context.Context, cid string) (*CodexManifest, error) {
 	url := fmt.Sprintf("%s/api/codex/v1/data/%s/network", c.BaseURL, cid)
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)

@@ -123,7 +123,7 @@ func TestIntegration_CheckNonExistingCID(t *testing.T) {
 	t.Logf("HasCid confirmed CID is no longer present: %s", cid)
 }
 
-func TestIntegration_LocalDownload(t *testing.T) {
+func TestIntegration_TriggerDownload(t *testing.T) {
 	host := getenv("CODEX_HOST", "localhost")
 	port := getenv("CODEX_API_PORT", "8001") // Use port 8001 as specified by user
 	client := NewCodexClient(host, port)
@@ -157,9 +157,9 @@ func TestIntegration_LocalDownload(t *testing.T) {
 	}()
 
 	// Trigger async download
-	manifest, err := client.LocalDownload(cid)
+	manifest, err := client.TriggerDownload(cid)
 	if err != nil {
-		t.Fatalf("LocalDownload failed: %v", err)
+		t.Fatalf("TriggerDownload failed: %v", err)
 	}
 	t.Logf("Async download triggered, manifest CID: %s", manifest.CID)
 
@@ -192,13 +192,13 @@ func TestIntegration_LocalDownload(t *testing.T) {
 		t.Fatalf("Timeout waiting for CID to be available locally after 10 seconds")
 	}
 
-	// Now download the actual content and verify it matches
+	// Now download the actual content from local storage and verify it matches
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	var downloadBuf bytes.Buffer
-	if err := client.DownloadWithContext(ctx, cid, &downloadBuf); err != nil {
-		t.Fatalf("Download after local download failed: %v", err)
+	if err := client.LocalDownloadWithContext(ctx, cid, &downloadBuf); err != nil {
+		t.Fatalf("LocalDownload after trigger download failed: %v", err)
 	}
 
 	downloadedData := downloadBuf.Bytes()
