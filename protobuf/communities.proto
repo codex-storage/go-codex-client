@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+option go_package = "./;protobuf";
+package protobuf;
+
+message CommunityMessageArchiveIndexCid {
+  uint64 clock = 1;
+  string cid = 2;
+}
+
+message WakuMessage {
+  bytes sig = 1;
+  uint64 timestamp = 2;
+  bytes topic = 3;
+  bytes payload = 4;
+  bytes padding = 5;
+  bytes hash = 6;
+  string thirdPartyId = 7;
+}
+
+message WakuMessageArchiveMetadata {
+  uint32 version = 1;
+  uint64 from = 2;
+  uint64 to = 3;
+  repeated bytes contentTopic = 4;
+}
+
+message WakuMessageArchive {
+  uint32 version = 1;
+  WakuMessageArchiveMetadata metadata = 2;
+  repeated WakuMessage messages = 3;
+}
+
+message WakuMessageArchiveIndexMetadata {
+  uint32 version = 1;
+  WakuMessageArchiveMetadata metadata = 2;
+  uint64 offset = 3;
+  uint64 size = 4;
+  uint64 padding = 5;
+}
+
+message WakuMessageArchiveIndex {
+  map<string, WakuMessageArchiveIndexMetadata> archives = 1;
+}
+
+message CodexWakuMessageArchiveIndexMetadata {
+  uint32 version = 1;
+  WakuMessageArchiveMetadata metadata = 2;
+  string cid = 3;
+}
+
+message CodexWakuMessageArchiveIndex {
+  map<string, CodexWakuMessageArchiveIndexMetadata> archives = 1;
+}

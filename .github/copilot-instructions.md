@@ -112,6 +112,8 @@ flag.Parse()
     - Build tag-gated: run with `go test -v -tags=integration ./communities -run Integration`
     - Env: `CODEX_HOST` (default `localhost`), `CODEX_API_PORT` (default `8080`), optional `CODEX_TIMEOUT_MS`
     - Uses random 1KB payload, logs hex preview, uploads, downloads, and verifies equality
+    - Includes LocalDownload test: uploads→triggers async download→polls HasCid (10s timeout)→verifies content
+    - All tests use `RemoveCid` cleanup in defer blocks to prevent storage accumulation
 - Debug by observing HTTP responses and Codex node logs; client timeout defaults to 60s
 
 ## Repo Meta
