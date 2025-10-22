@@ -73,8 +73,8 @@ func (c *CodexClient) Download(cid string, output io.Writer) error {
 	return c.DownloadWithContext(context.Background(), cid, output)
 }
 
-func (c *CodexClient) LocalDownload(cid string, output io.Writer) error {
-	return c.LocalDownloadWithContext(context.Background(), cid, output)
+func (c *CodexClient) LocalDownload(cid string) (*CodexManifest, error) {
+	return c.LocalDownloadWithContext(context.Background(), cid)
 }
 
 func (c *CodexClient) HasCid(cid string) (bool, error) {
@@ -152,27 +152,45 @@ func (c *CodexClient) DownloadWithContext(ctx context.Context, cid string, outpu
 	return c.copyWithContext(ctx, output, resp.Body)
 }
 
-func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string, output io.Writer) error {
-	url := fmt.Sprintf("%s/api/codex/v1/data/%s", c.BaseURL, cid)
+// CodexManifest represents the manifest returned by async download
+type CodexManifest struct {
+	CID      string `json:"cid"`
+	Manifest struct {
+		TreeCid     string `json:"treeCid"`
+		DatasetSize int64  `json:"datasetSize"`
+		BlockSize   int    `json:"blockSize"`
+		Protected   bool   `json:"protected"`
+		Filename    string `json:"filename"`
+		Mimetype    string `json:"mimetype"`
+	} `json:"manifest"`
+}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string) (*CodexManifest, error) {
+	url := fmt.Sprintf("%s/api/codex/v1/data/%s/network", c.BaseURL, cid)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to download from codex: %w", err)
+		return nil, fmt.Errorf("failed to trigger download from codex: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("codex download failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("codex async download failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	// Use context-aware copy for cancellable streaming
-	return c.copyWithContext(ctx, output, resp.Body)
+	// Parse JSON response containing manifest
+	var manifest CodexManifest
+	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("failed to parse download manifest: %w", err)
+	}
+
+	return &manifest, nil
 }
 
 // copyWithContext performs io.Copy but respects context cancellation

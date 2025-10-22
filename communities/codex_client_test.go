@@ -275,3 +275,165 @@ func TestRemoveCid_Error(t *testing.T) {
 		t.Fatalf("error should mention status 500, got: %v", err)
 	}
 }
+
+func TestLocalDownloadWithContext_Success(t *testing.T) {
+	const testCid = "zDvZRwzmTestCID"
+	const expectedManifest = `{
+		"cid": "zDvZRwzmTestCID",
+		"manifest": {
+			"treeCid": "zDvZRwzmTreeCID",
+			"datasetSize": 1024,
+			"blockSize": 65536,
+			"protected": false,
+			"filename": "test-file.bin",
+			"mimetype": "application/octet-stream"
+		}
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if r.URL.Path != "/api/codex/v1/data/"+testCid+"/network" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(expectedManifest))
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if manifest.CID != testCid {
+		t.Fatalf("expected CID %q, got %q", testCid, manifest.CID)
+	}
+	if manifest.Manifest.TreeCid != "zDvZRwzmTreeCID" {
+		t.Fatalf("expected TreeCid %q, got %q", "zDvZRwzmTreeCID", manifest.Manifest.TreeCid)
+	}
+	if manifest.Manifest.DatasetSize != 1024 {
+		t.Fatalf("expected DatasetSize %d, got %d", 1024, manifest.Manifest.DatasetSize)
+	}
+	if manifest.Manifest.Filename != "test-file.bin" {
+		t.Fatalf("expected Filename %q, got %q", "test-file.bin", manifest.Manifest.Filename)
+	}
+}
+
+func TestLocalDownloadWithContext_RequestError(t *testing.T) {
+	// Create a server and immediately close it to trigger connection error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.LocalDownloadWithContext(ctx, "zDvZRwzmTestCID")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if manifest != nil {
+		t.Fatalf("expected nil manifest on error, got %v", manifest)
+	}
+}
+
+func TestLocalDownloadWithContext_JSONParseError(t *testing.T) {
+	const testCid = "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		// Return invalid JSON
+		w.Write([]byte(`{"invalid": json}`))
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	if err == nil {
+		t.Fatal("expected JSON parse error, got nil")
+	}
+	if manifest != nil {
+		t.Fatalf("expected nil manifest on parse error, got %v", manifest)
+	}
+	if !strings.Contains(err.Error(), "failed to parse download manifest") {
+		t.Fatalf("error should mention parse failure, got: %v", err)
+	}
+}
+
+func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
+	const testCid = "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("CID not found"))
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	if err == nil {
+		t.Fatal("expected error for 404 status, got nil")
+	}
+	if manifest != nil {
+		t.Fatalf("expected nil manifest on HTTP error, got %v", manifest)
+	}
+	if !strings.Contains(err.Error(), "404") {
+		t.Fatalf("error should mention status 404, got: %v", err)
+	}
+}
+
+func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
+	const testCid = "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate slow response to allow cancellation
+		select {
+		case <-r.Context().Done():
+			return
+		case <-time.After(200 * time.Millisecond):
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"cid": "test"}`))
+		}
+	}))
+	defer server.Close()
+
+	client := NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	// Cancel after 50ms (before server responds)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	manifest, err := client.LocalDownloadWithContext(ctx, testCid)
+	if err == nil {
+		t.Fatal("expected cancellation error, got nil")
+	}
+	if manifest != nil {
+		t.Fatalf("expected nil manifest on cancellation, got %v", manifest)
+	}
+	// Accept either canceled or deadline exceeded depending on timing
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		// net/http may wrap the context error; check error string as a fallback
+		es := err.Error()
+		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
+			t.Fatalf("expected context cancellation, got: %v", err)
+		}
+	}
+}

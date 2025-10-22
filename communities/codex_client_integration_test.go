@@ -49,6 +49,13 @@ func TestIntegration_UploadAndDownload(t *testing.T) {
 	}
 	t.Logf("Upload successful, CID: %s", cid)
 
+	// Clean up after test
+	defer func() {
+		if err := client.RemoveCid(cid); err != nil {
+			t.Logf("Warning: Failed to remove CID %s: %v", cid, err)
+		}
+	}()
+
 	// Verify existence via HasCid
 	exists, err := client.HasCid(cid)
 	if err != nil {
@@ -114,6 +121,94 @@ func TestIntegration_CheckNonExistingCID(t *testing.T) {
 		t.Fatalf("HasCid returned true for removed CID %s", cid)
 	}
 	t.Logf("HasCid confirmed CID is no longer present: %s", cid)
+}
+
+func TestIntegration_LocalDownload(t *testing.T) {
+	host := getenv("CODEX_HOST", "localhost")
+	port := getenv("CODEX_API_PORT", "8001") // Use port 8001 as specified by user
+	client := NewCodexClient(host, port)
+
+	// Optional request timeout override
+	if ms := os.Getenv("CODEX_TIMEOUT_MS"); ms != "" {
+		if d, err := time.ParseDuration(ms + "ms"); err == nil {
+			client.SetRequestTimeout(d)
+		}
+	}
+
+	// Generate random payload to ensure proper round-trip verification
+	payload := make([]byte, 1024)
+	if _, err := rand.Read(payload); err != nil {
+		t.Fatalf("failed to generate random payload: %v", err)
+	}
+	t.Logf("Generated payload (first 32 bytes hex): %s", hex.EncodeToString(payload[:32]))
+
+	// Upload the data
+	cid, err := client.Upload(bytes.NewReader(payload), "local-download-test.bin")
+	if err != nil {
+		t.Fatalf("upload failed: %v", err)
+	}
+	t.Logf("Upload successful, CID: %s", cid)
+
+	// Clean up after test
+	defer func() {
+		if err := client.RemoveCid(cid); err != nil {
+			t.Logf("Warning: Failed to remove CID %s: %v", cid, err)
+		}
+	}()
+
+	// Trigger async download
+	manifest, err := client.LocalDownload(cid)
+	if err != nil {
+		t.Fatalf("LocalDownload failed: %v", err)
+	}
+	t.Logf("Async download triggered, manifest CID: %s", manifest.CID)
+
+	// Poll HasCid for up to 10 seconds using goroutine and channel
+	downloadComplete := make(chan bool, 1)
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for range ticker.C {
+			hasCid, err := client.HasCid(cid)
+			if err != nil {
+				t.Logf("HasCid check failed: %v", err)
+				continue
+			}
+			if hasCid {
+				t.Logf("CID is now available locally")
+				downloadComplete <- true
+				return
+			} else {
+				t.Logf("CID not yet available locally, continuing to poll...")
+			}
+		}
+	}()
+
+	// Wait for download completion or timeout
+	select {
+	case <-downloadComplete:
+		// Download completed successfully
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Timeout waiting for CID to be available locally after 10 seconds")
+	}
+
+	// Now download the actual content and verify it matches
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var downloadBuf bytes.Buffer
+	if err := client.DownloadWithContext(ctx, cid, &downloadBuf); err != nil {
+		t.Fatalf("Download after local download failed: %v", err)
+	}
+
+	downloadedData := downloadBuf.Bytes()
+	t.Logf("Downloaded data (first 32 bytes hex): %s", hex.EncodeToString(downloadedData[:32]))
+
+	// Verify the data matches
+	if !bytes.Equal(payload, downloadedData) {
+		t.Errorf("Downloaded data does not match uploaded data")
+		t.Errorf("Expected length: %d, got: %d", len(payload), len(downloadedData))
+	}
 }
 
 func getenv(k, def string) string {
