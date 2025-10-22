@@ -24,7 +24,7 @@ type CodexArchiveProcessor interface {
 
 // CodexArchiveDownloader handles downloading individual archive files from Codex storage
 type CodexArchiveDownloader struct {
-	codexClient        *CodexClient
+	codexClient        CodexClientInterface
 	index              *protobuf.CodexWakuMessageArchiveIndex
 	communityID        string
 	existingArchiveIDs []string
@@ -40,15 +40,15 @@ type CodexArchiveDownloader struct {
 
 	// Download control
 	downloadComplete bool
-	downloadError    error
 	cancelled        bool
+	pollingInterval  time.Duration // configurable polling interval for HasCid checks
 
 	// Callback for signaling archive download completion
 	onArchiveDownloaded func(hash string, from, to uint64)
 }
 
 // NewCodexArchiveDownloader creates a new archive downloader
-func NewCodexArchiveDownloader(codexClient *CodexClient, index *protobuf.CodexWakuMessageArchiveIndex, communityID string, existingArchiveIDs []string, cancelChan chan struct{}) *CodexArchiveDownloader {
+func NewCodexArchiveDownloader(codexClient CodexClientInterface, index *protobuf.CodexWakuMessageArchiveIndex, communityID string, existingArchiveIDs []string, cancelChan chan struct{}) *CodexArchiveDownloader {
 	return &CodexArchiveDownloader{
 		codexClient:                  codexClient,
 		index:                        index,
@@ -59,7 +59,15 @@ func NewCodexArchiveDownloader(codexClient *CodexClient, index *protobuf.CodexWa
 		totalDownloadedArchivesCount: len(existingArchiveIDs),
 		archiveDownloadProgress:      make(map[string]int64),
 		archiveDownloadCancel:        make(map[string]chan struct{}),
+		pollingInterval:              1 * time.Second, // Default production polling interval
 	}
+}
+
+// SetPollingInterval sets the polling interval for HasCid checks (useful for testing)
+func (d *CodexArchiveDownloader) SetPollingInterval(interval time.Duration) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pollingInterval = interval
 }
 
 // SetOnArchiveDownloaded sets a callback function to be called when an archive is successfully downloaded
@@ -104,13 +112,6 @@ func (d *CodexArchiveDownloader) IsDownloadComplete() bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.downloadComplete
-}
-
-// GetDownloadError returns any error that occurred during download
-func (d *CodexArchiveDownloader) GetDownloadError() error {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.downloadError
 }
 
 // IsCancelled returns whether the download was cancelled
@@ -215,10 +216,10 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 			}
 			d.mu.Unlock()
 
-			// poll every second until we confirm it's downloaded
+			// poll at configured interval until we confirm it's downloaded
 			// or timeout after 30 seconds
 			timeout := time.After(30 * time.Second)
-			ticker := time.NewTicker(1 * time.Second)
+			ticker := time.NewTicker(d.pollingInterval)
 			defer ticker.Stop()
 		PollLoop:
 			for {

@@ -104,3 +104,29 @@ To make sure that the test is actually run and not cached, use `count` option:
 ```bash
 go test -v -tags=integration ./communities -run Integration -timeout 15s -count 1
 ```
+
+### Regenerating artifacts
+
+Everything you need comes included in the repo. But if you decide to change things,
+you will need to regenerate some artifacts. There are two:
+
+- the protobuf
+- the mocks
+
+The easiest way is to regenerate all in one go:
+
+```bash
+go generate ./...
+```
+
+If you just need to regenerate the mocks:
+
+```bash
+go generate ./communities
+```
+
+If you just need to regenerate the protobuf:
+
+```bash
+go generate ./protobuf
+```
