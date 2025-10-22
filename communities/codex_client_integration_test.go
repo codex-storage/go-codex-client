@@ -1,7 +1,7 @@
 //go:build integration
 // +build integration
 
-package communities
+package communities_test
 
 import (
 	"bytes"
@@ -11,6 +11,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"go-codex-client/communities"
 )
 
 // This test exercises real network calls against a running Codex node.
@@ -27,7 +29,7 @@ import (
 func TestIntegration_UploadAndDownload(t *testing.T) {
 	host := getenv("CODEX_HOST", "localhost")
 	port := getenv("CODEX_API_PORT", "8080")
-	client := NewCodexClient(host, port)
+	client := communities.NewCodexClient(host, port)
 
 	// Optional request timeout override
 	if ms := os.Getenv("CODEX_TIMEOUT_MS"); ms != "" {
@@ -82,7 +84,7 @@ func TestIntegration_UploadAndDownload(t *testing.T) {
 func TestIntegration_CheckNonExistingCID(t *testing.T) {
 	host := getenv("CODEX_HOST", "localhost")
 	port := getenv("CODEX_API_PORT", "8080")
-	client := NewCodexClient(host, port)
+	client := communities.NewCodexClient(host, port)
 
 	// Generate random payload to ensure proper round-trip verification
 	payload := make([]byte, 1024)
@@ -126,7 +128,7 @@ func TestIntegration_CheckNonExistingCID(t *testing.T) {
 func TestIntegration_TriggerDownload(t *testing.T) {
 	host := getenv("CODEX_HOST", "localhost")
 	port := getenv("CODEX_API_PORT", "8001") // Use port 8001 as specified by user
-	client := NewCodexClient(host, port)
+	client := communities.NewCodexClient(host, port)
 
 	// Optional request timeout override
 	if ms := os.Getenv("CODEX_TIMEOUT_MS"); ms != "" {

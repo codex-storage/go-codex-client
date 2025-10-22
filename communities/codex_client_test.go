@@ -1,4 +1,4 @@
-package communities
+package communities_test
 
 import (
 	"bytes"
@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"go-codex-client/communities"
 )
 
 func TestUpload_Success(t *testing.T) {
@@ -47,7 +49,7 @@ func TestUpload_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	// Act
@@ -82,7 +84,7 @@ func TestDownload_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	var buf bytes.Buffer
@@ -124,7 +126,7 @@ func TestDownloadWithContext_Cancel(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
@@ -169,7 +171,7 @@ func TestHasCid_Success(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := NewCodexClient("localhost", "8080")
+			client := communities.NewCodexClient("localhost", "8080")
 			client.BaseURL = server.URL
 
 			got, err := client.HasCid(tt.cid)
@@ -188,7 +190,7 @@ func TestHasCid_RequestError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server.Close() // Close immediately so connection fails
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL // Use the closed server's URL
 
 	got, err := client.HasCid("zDvZRwzmTestCID")
@@ -212,7 +214,7 @@ func TestHasCid_CidMismatch(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	got, err := client.HasCid(requestCid)
@@ -245,7 +247,7 @@ func TestRemoveCid_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	err := client.RemoveCid(testCid)
@@ -264,7 +266,7 @@ func TestRemoveCid_Error(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	err := client.RemoveCid(testCid)
@@ -305,7 +307,7 @@ func TestTriggerDownload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -333,7 +335,7 @@ func TestTriggerDownloadWithContext_RequestError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -357,7 +359,7 @@ func TestTriggerDownloadWithContext_JSONParseError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -382,7 +384,7 @@ func TestTriggerDownloadWithContext_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -414,7 +416,7 @@ func TestTriggerDownloadWithContext_Cancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	// Cancel after 50ms (before server responds)
@@ -457,7 +459,7 @@ func TestLocalDownload(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	var buf bytes.Buffer
@@ -490,7 +492,7 @@ func TestLocalDownloadWithContext_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -510,7 +512,7 @@ func TestLocalDownloadWithContext_RequestError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -534,7 +536,7 @@ func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	ctx := context.Background()
@@ -560,7 +562,7 @@ func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewCodexClient("localhost", "8080")
+	client := communities.NewCodexClient("localhost", "8080")
 	client.BaseURL = server.URL
 
 	// Create a context with a very short timeout
