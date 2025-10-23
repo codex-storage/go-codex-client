@@ -12,7 +12,9 @@ package mock_communities
 import (
 	context "context"
 	communities "go-codex-client/communities"
+	io "io"
 	reflect "reflect"
+	time "time"
 
 	gomock "go.uber.org/mock/gomock"
 )
@@ -41,6 +43,34 @@ func (m *MockCodexClientInterface) EXPECT() *MockCodexClientInterfaceMockRecorde
 	return m.recorder
 }
 
+// Download mocks base method.
+func (m *MockCodexClientInterface) Download(cid string, output io.Writer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Download", cid, output)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Download indicates an expected call of Download.
+func (mr *MockCodexClientInterfaceMockRecorder) Download(cid, output any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Download", reflect.TypeOf((*MockCodexClientInterface)(nil).Download), cid, output)
+}
+
+// DownloadWithContext mocks base method.
+func (m *MockCodexClientInterface) DownloadWithContext(ctx context.Context, cid string, output io.Writer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DownloadWithContext", ctx, cid, output)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DownloadWithContext indicates an expected call of DownloadWithContext.
+func (mr *MockCodexClientInterfaceMockRecorder) DownloadWithContext(ctx, cid, output any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadWithContext", reflect.TypeOf((*MockCodexClientInterface)(nil).DownloadWithContext), ctx, cid, output)
+}
+
 // HasCid mocks base method.
 func (m *MockCodexClientInterface) HasCid(cid string) (bool, error) {
 	m.ctrl.T.Helper()
@@ -56,6 +86,75 @@ func (mr *MockCodexClientInterfaceMockRecorder) HasCid(cid any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasCid", reflect.TypeOf((*MockCodexClientInterface)(nil).HasCid), cid)
 }
 
+// LocalDownload mocks base method.
+func (m *MockCodexClientInterface) LocalDownload(cid string, output io.Writer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LocalDownload", cid, output)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// LocalDownload indicates an expected call of LocalDownload.
+func (mr *MockCodexClientInterfaceMockRecorder) LocalDownload(cid, output any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalDownload", reflect.TypeOf((*MockCodexClientInterface)(nil).LocalDownload), cid, output)
+}
+
+// LocalDownloadWithContext mocks base method.
+func (m *MockCodexClientInterface) LocalDownloadWithContext(ctx context.Context, cid string, output io.Writer) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LocalDownloadWithContext", ctx, cid, output)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// LocalDownloadWithContext indicates an expected call of LocalDownloadWithContext.
+func (mr *MockCodexClientInterfaceMockRecorder) LocalDownloadWithContext(ctx, cid, output any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocalDownloadWithContext", reflect.TypeOf((*MockCodexClientInterface)(nil).LocalDownloadWithContext), ctx, cid, output)
+}
+
+// RemoveCid mocks base method.
+func (m *MockCodexClientInterface) RemoveCid(cid string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveCid", cid)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveCid indicates an expected call of RemoveCid.
+func (mr *MockCodexClientInterfaceMockRecorder) RemoveCid(cid any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveCid", reflect.TypeOf((*MockCodexClientInterface)(nil).RemoveCid), cid)
+}
+
+// SetRequestTimeout mocks base method.
+func (m *MockCodexClientInterface) SetRequestTimeout(timeout time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRequestTimeout", timeout)
+}
+
+// SetRequestTimeout indicates an expected call of SetRequestTimeout.
+func (mr *MockCodexClientInterfaceMockRecorder) SetRequestTimeout(timeout any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRequestTimeout", reflect.TypeOf((*MockCodexClientInterface)(nil).SetRequestTimeout), timeout)
+}
+
+// TriggerDownload mocks base method.
+func (m *MockCodexClientInterface) TriggerDownload(cid string) (*communities.CodexManifest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TriggerDownload", cid)
+	ret0, _ := ret[0].(*communities.CodexManifest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TriggerDownload indicates an expected call of TriggerDownload.
+func (mr *MockCodexClientInterfaceMockRecorder) TriggerDownload(cid any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerDownload", reflect.TypeOf((*MockCodexClientInterface)(nil).TriggerDownload), cid)
+}
+
 // TriggerDownloadWithContext mocks base method.
 func (m *MockCodexClientInterface) TriggerDownloadWithContext(ctx context.Context, cid string) (*communities.CodexManifest, error) {
 	m.ctrl.T.Helper()
@@ -69,4 +168,34 @@ func (m *MockCodexClientInterface) TriggerDownloadWithContext(ctx context.Contex
 func (mr *MockCodexClientInterfaceMockRecorder) TriggerDownloadWithContext(ctx, cid any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TriggerDownloadWithContext", reflect.TypeOf((*MockCodexClientInterface)(nil).TriggerDownloadWithContext), ctx, cid)
+}
+
+// Upload mocks base method.
+func (m *MockCodexClientInterface) Upload(data io.Reader, filename string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Upload", data, filename)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Upload indicates an expected call of Upload.
+func (mr *MockCodexClientInterfaceMockRecorder) Upload(data, filename any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockCodexClientInterface)(nil).Upload), data, filename)
+}
+
+// UploadArchive mocks base method.
+func (m *MockCodexClientInterface) UploadArchive(encodedArchive []byte) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadArchive", encodedArchive)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UploadArchive indicates an expected call of UploadArchive.
+func (mr *MockCodexClientInterfaceMockRecorder) UploadArchive(encodedArchive any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadArchive", reflect.TypeOf((*MockCodexClientInterface)(nil).UploadArchive), encodedArchive)
 }
