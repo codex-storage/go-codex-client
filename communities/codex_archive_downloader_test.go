@@ -4,6 +4,7 @@
 package communities_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -204,13 +205,13 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 	suite.T().Logf("   - Start order (sorted): %v", startOrder)
 }
 
-func (suite *CodexArchiveDownloaderTestifySuite) TestCancellationDuringTriggerDownload() {
-	// Test that cancellation during TriggerDownloadWithContext is handled properly
+func (suite *CodexArchiveDownloaderTestifySuite) TestErrorDuringTriggerDownload() {
+	// Test that errors during TriggerDownloadWithContext are handled properly
 	communityID := "test-community"
 	existingArchiveIDs := []string{} // No existing archives
 	cancelChan := make(chan struct{})
 
-	// Mock TriggerDownloadWithContext to simulate a cancellation error
+	// Mock TriggerDownloadWithContext to simulate an error
 	suite.mockClient.EXPECT().
 		TriggerDownloadWithContext(gomock.Any(), "test-cid-1").
 		Return(nil, assert.AnError). // Return a generic error to simulate failure
@@ -250,8 +251,71 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestCancellationDuringTriggerDo
 	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete (no pending downloads)")
 	assert.Equal(suite.T(), 0, downloader.GetPendingArchivesCount(), "No archives should be pending")
 
-	suite.T().Log("✅ Cancellation during trigger download test passed")
+	suite.T().Log("✅ Error during trigger download test passed")
 	suite.T().Log("   - TriggerDownload failed as expected")
+	suite.T().Log("   - No polling occurred (as intended)")
+	suite.T().Log("   - Success callback was NOT invoked")
+}
+
+func (suite *CodexArchiveDownloaderTestifySuite) TestActualCancellationDuringTriggerDownload() {
+	// Test real cancellation during TriggerDownloadWithContext using DoAndReturn
+	communityID := "test-community"
+	existingArchiveIDs := []string{} // No existing archives
+	cancelChan := make(chan struct{})
+
+	// Use DoAndReturn to create a realistic TriggerDownload that waits for cancellation
+	suite.mockClient.EXPECT().
+		TriggerDownloadWithContext(gomock.Any(), "test-cid-1").
+		DoAndReturn(func(ctx context.Context, cid string) (*communities.CodexManifest, error) {
+			// Simulate work by waiting for context cancellation
+			select {
+			case <-time.After(5 * time.Second): // This should never happen in our test
+				return &communities.CodexManifest{CID: cid}, nil
+			case <-ctx.Done(): // Wait for actual context cancellation
+				return nil, ctx.Err() // Return the actual cancellation error
+			}
+		}).
+		Times(1)
+
+	// Create downloader with mock client
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, suite.index, communityID, existingArchiveIDs, cancelChan, logger)
+	downloader.SetPollingInterval(10 * time.Millisecond)
+	downloader.SetPollingTimeout(200 * time.Millisecond) // Short timeout - we should never reach polling
+
+	// Track callbacks
+	var callbackInvoked bool
+	var startCallbackInvoked bool
+
+	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
+		callbackInvoked = true
+	})
+
+	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startCallbackInvoked = true
+	})
+
+	// Start the download
+	downloader.StartDownload()
+
+	// Wait a bit for the download to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel the entire operation (this should cancel the trigger download context)
+	close(cancelChan)
+
+	// Wait for the operation to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify the state
+	assert.True(suite.T(), startCallbackInvoked, "Start callback should be invoked")
+	assert.False(suite.T(), callbackInvoked, "Success callback should NOT be invoked on cancellation")
+	assert.Equal(suite.T(), 0, downloader.GetTotalDownloadedArchivesCount(), "No archives should be downloaded on cancellation")
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete (no pending downloads)")
+	assert.Equal(suite.T(), 0, downloader.GetPendingArchivesCount(), "No archives should be pending")
+
+	suite.T().Log("✅ Actual cancellation during trigger download test passed")
+	suite.T().Log("   - TriggerDownload was actually cancelled")
 	suite.T().Log("   - No polling occurred (as intended)")
 	suite.T().Log("   - Success callback was NOT invoked")
 }
