@@ -154,14 +154,16 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 		})
 	}
 
-	// Sort by timestamp (newest first) - same as torrent version
-	for i := 0; i < len(archivesList)-1; i++ {
-		for j := i + 1; j < len(archivesList); j++ {
-			if archivesList[i].from < archivesList[j].from {
-				archivesList[i], archivesList[j] = archivesList[j], archivesList[i]
-			}
+	// Sort by timestamp (newest first)
+	slices.SortFunc(archivesList, func(a, b archiveInfo) int {
+		if a.from > b.from {
+			return -1 // a is newer, should come first
 		}
-	}
+		if a.from < b.from {
+			return 1 // b is newer, should come first
+		}
+		return 0 // equal timestamps
+	})
 
 	// Monitor for cancellation in a separate goroutine
 	go func() {
