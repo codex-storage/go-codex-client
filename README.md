@@ -105,6 +105,61 @@ To make sure that the test is actually run and not cached, use `count` option:
 go test -v -tags=integration ./communities -run Integration -timeout 15s -count 1
 ```
 
+### Using gotestsum to run the tests
+
+You can also use `gotestsum` to run the tests (you may need to install it first, e.g. `go install gotest.tools/gotestsum@v1.13.0`):
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run "TestCodexArchiveDownloaderSuite" -count 1
+```
+
+or to run all tests (including CodexClient tests):
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -count 1
+```
+
+For a more verbose output including logs use `-f standard-verbose`, e.g.:
+
+```bash
+gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -run "TestCodexArchiveDownloaderSuite" -v -count 1
+```
+
+### Running integration tests
+
+When building Codex client for testing like here, I often remove some logging noise, by slightly changing the build params in `build.nims`:
+
+```nim
+task codex, "build codex binary":
+  buildBinary "codex",
+    # params = "-d:chronicles_runtime_filtering -d:chronicles_log_level=TRACE"
+    params =
+      "-d:chronicles_runtime_filtering -d:chronicles_log_level=TRACE -d:chronicles_enabled_topics:restapi:TRACE,node:TRACE"
+```
+
+You see a slightly more selective `params` in the `codex` task.
+
+To start Codex client, use e.g.:
+
+```bash
+./build/codex --data-dir=./data-1 --listen-addrs=/ip4/127.0.0.1/tcp/8081 --api-port=8001 --nat=none --disc-port=8091 --log-level=TRACE
+```
+
+Then to run archive downloader integration tests:
+
+```bash
+CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=integration -run "TestCodexArchiveDownloaderIntegrationSuite" -v -count 1
+```
+
+or to run all integration tests:
+
+```bash
+CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=integration -v -count 1
+```
+
+I prefer to be more selective when running integration tests.
+
+
 ### Regenerating artifacts
 
 Everything you need comes included in the repo. But if you decide to change things,
