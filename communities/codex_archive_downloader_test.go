@@ -156,7 +156,13 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, index, communityID, existingArchiveIDs, cancelChan)
 	downloader.SetPollingInterval(10 * time.Millisecond)
 
-	// Track completed archives
+	// Track the order in which archives are started (deterministic)
+	var startOrder []string
+	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startOrder = append(startOrder, hash)
+	})
+
+	// Track completed archives (non-deterministic due to concurrency)
 	completedArchives := make(map[string]bool)
 	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
 		completedArchives[hash] = true
@@ -185,8 +191,14 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 	assert.Contains(suite.T(), completedArchives, "archive-2", "Should have completed archive-2")
 	assert.Contains(suite.T(), completedArchives, "archive-3", "Should have completed archive-3")
 
+	// Verify sorting: archives should be started in most-recent-first order (deterministic)
+	// This tests the internal sorting logic before concurrency begins
+	expectedStartOrder := []string{"archive-3", "archive-2", "archive-1"}
+	assert.Equal(suite.T(), expectedStartOrder, startOrder, "Archives should be started in most-recent-first order")
+
 	suite.T().Log("✅ Multiple archives test passed")
 	suite.T().Logf("   - Completed %d out of %d archives", len(completedArchives), 3)
+	suite.T().Logf("   - Start order (sorted): %v", startOrder)
 }
 
 // Run the test suite

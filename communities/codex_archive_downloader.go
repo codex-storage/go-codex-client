@@ -43,8 +43,9 @@ type CodexArchiveDownloader struct {
 	cancelled        bool
 	pollingInterval  time.Duration // configurable polling interval for HasCid checks
 
-	// Callback for signaling archive download completion
-	onArchiveDownloaded func(hash string, from, to uint64)
+	// Callbacks
+	onArchiveDownloaded       func(hash string, from, to uint64)
+	onStartingArchiveDownload func(hash string, from, to uint64)
 }
 
 // NewCodexArchiveDownloader creates a new archive downloader
@@ -73,6 +74,13 @@ func (d *CodexArchiveDownloader) SetPollingInterval(interval time.Duration) {
 // SetOnArchiveDownloaded sets a callback function to be called when an archive is successfully downloaded
 func (d *CodexArchiveDownloader) SetOnArchiveDownloaded(callback func(hash string, from, to uint64)) {
 	d.onArchiveDownloaded = callback
+}
+
+// SetOnStartingArchiveDownload sets a callback function to be called before starting an archive download
+// This callback is called on the main thread before launching goroutines, making it useful for testing
+// the deterministic order in which archives are processed (sorted newest first)
+func (d *CodexArchiveDownloader) SetOnStartingArchiveDownload(callback func(hash string, from, to uint64)) {
+	d.onStartingArchiveDownload = callback
 }
 
 // GetTotalArchivesCount returns the total number of archives to download
@@ -204,6 +212,11 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 		d.archiveDownloadProgress[archive.hash] = 0
 		d.archiveDownloadCancel[archive.hash] = archiveCancelChan
 		d.mu.Unlock()
+
+		// Call callback before starting
+		if d.onStartingArchiveDownload != nil {
+			d.onStartingArchiveDownload(archive.hash, archive.from, archive.to)
+		}
 
 		// Trigger archive download and track progress in a goroutine
 		go func(archiveHash, archiveCid string, archiveFrom, archiveTo uint64, archiveCancel chan struct{}) {
