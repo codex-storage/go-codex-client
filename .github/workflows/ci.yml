@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21' # Use Go 1.21+ for generics support
+        cache: true
+    
+    - name: Install gotestsum
+      run: go install gotest.tools/gotestsum@latest
+    
+    - name: Install gomock (for code generation)
+      run: go install go.uber.org/mock/mockgen@latest
+    
+    - name: Install protoc
+      uses: arduino/setup-protoc@v2
+      with:
+        version: '24.x'
+    
+    - name: Install protoc-gen-go
+      run: go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+    
+    - name: Download dependencies
+      run: go mod download
+    
+    - name: Verify dependencies
+      run: go mod verify
+    
+    - name: Generate code (protobuf and mocks)
+      run: go generate ./...
+    
+    - name: Check for uncommitted generated files
+      run: |
+        if [[ -n $(git status --porcelain) ]]; then
+          echo "Generated files are not up to date. Please run 'go generate ./...' and commit the changes."
+          git status --porcelain
+          exit 1
+        fi
+    
+    - name: Build
+      run: go build -v ./...
+    
+    - name: Run unit tests
+      run: gotestsum --packages="./..." -f standard-verbose --rerun-fails -- -v -count=1
+    
+    - name: Check test coverage
+      run: |
+        go test -coverprofile=coverage.out ./...
+        go tool cover -func=coverage.out
+    
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
