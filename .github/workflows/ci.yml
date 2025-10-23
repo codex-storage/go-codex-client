@@ -46,7 +46,7 @@ jobs:
       run: go build -v ./...
     
     - name: Run unit tests
-      run: gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -v -count=1
+      run: gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -race -v -count=1
     
     - name: Check test coverage for communities package
       run: |

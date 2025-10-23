@@ -5,6 +5,7 @@ package communities_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -162,14 +163,20 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 
 	// Track the order in which archives are started (deterministic)
 	var startOrder []string
+	var startOrderMu sync.Mutex
 	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startOrderMu.Lock()
 		startOrder = append(startOrder, hash)
+		startOrderMu.Unlock()
 	})
 
 	// Track completed archives (non-deterministic due to concurrency)
 	completedArchives := make(map[string]bool)
+	var completedArchivesMu sync.Mutex
 	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
+		completedArchivesMu.Lock()
 		completedArchives[hash] = true
+		completedArchivesMu.Unlock()
 	})
 
 	// Initial state verification
@@ -189,16 +196,28 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete")
 	assert.Equal(suite.T(), 3, downloader.GetTotalDownloadedArchivesCount(), "Should have downloaded all 3 archives")
 
-	// Verify all archives were processed
-	assert.Len(suite.T(), completedArchives, 3, "Should have completed exactly 3 archives")
-	assert.Contains(suite.T(), completedArchives, "archive-1", "Should have completed archive-1")
-	assert.Contains(suite.T(), completedArchives, "archive-2", "Should have completed archive-2")
-	assert.Contains(suite.T(), completedArchives, "archive-3", "Should have completed archive-3")
+	// Verify all archives were processed (with proper synchronization)
+	completedArchivesMu.Lock()
+	completedLen := len(completedArchives)
+	hasArchive1 := completedArchives["archive-1"]
+	hasArchive2 := completedArchives["archive-2"]
+	hasArchive3 := completedArchives["archive-3"]
+	completedArchivesMu.Unlock()
+
+	assert.Equal(suite.T(), 3, completedLen, "Should have completed exactly 3 archives")
+	assert.True(suite.T(), hasArchive1, "Should have completed archive-1")
+	assert.True(suite.T(), hasArchive2, "Should have completed archive-2")
+	assert.True(suite.T(), hasArchive3, "Should have completed archive-3")
 
 	// Verify sorting: archives should be started in most-recent-first order (deterministic)
 	// This tests the internal sorting logic before concurrency begins
+	startOrderMu.Lock()
+	startOrderCopy := make([]string, len(startOrder))
+	copy(startOrderCopy, startOrder)
+	startOrderMu.Unlock()
+
 	expectedStartOrder := []string{"archive-3", "archive-2", "archive-1"}
-	assert.Equal(suite.T(), expectedStartOrder, startOrder, "Archives should be started in most-recent-first order")
+	assert.Equal(suite.T(), expectedStartOrder, startOrderCopy, "Archives should be started in most-recent-first order")
 
 	suite.T().Log("✅ Multiple archives test passed")
 	suite.T().Logf("   - Completed %d out of %d archives", len(completedArchives), 3)
