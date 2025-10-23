@@ -6,12 +6,13 @@ package communities
 import (
 	"context"
 	"fmt"
-	"log"
 	"slices"
 	"sync"
 	"time"
 
 	"go-codex-client/protobuf"
+
+	"go.uber.org/zap"
 )
 
 // CodexArchiveProcessor handles processing of downloaded archive data
@@ -29,11 +30,11 @@ type CodexArchiveDownloader struct {
 	communityID        string
 	existingArchiveIDs []string
 	cancelChan         chan struct{} // for cancellation support
+	logger             *zap.Logger
 
 	// Progress tracking
 	totalArchivesCount           int
 	totalDownloadedArchivesCount int
-	currentArchiveHash           string
 	archiveDownloadProgress      map[string]int64 // hash -> bytes downloaded
 	archiveDownloadCancel        map[string]chan struct{}
 	mu                           sync.RWMutex
@@ -42,6 +43,7 @@ type CodexArchiveDownloader struct {
 	downloadComplete bool
 	cancelled        bool
 	pollingInterval  time.Duration // configurable polling interval for HasCid checks
+	pollingTimeout   time.Duration // configurable timeout for HasCid polling
 
 	// Callbacks
 	onArchiveDownloaded       func(hash string, from, to uint64)
@@ -49,18 +51,20 @@ type CodexArchiveDownloader struct {
 }
 
 // NewCodexArchiveDownloader creates a new archive downloader
-func NewCodexArchiveDownloader(codexClient CodexClientInterface, index *protobuf.CodexWakuMessageArchiveIndex, communityID string, existingArchiveIDs []string, cancelChan chan struct{}) *CodexArchiveDownloader {
+func NewCodexArchiveDownloader(codexClient CodexClientInterface, index *protobuf.CodexWakuMessageArchiveIndex, communityID string, existingArchiveIDs []string, cancelChan chan struct{}, logger *zap.Logger) *CodexArchiveDownloader {
 	return &CodexArchiveDownloader{
 		codexClient:                  codexClient,
 		index:                        index,
 		communityID:                  communityID,
 		existingArchiveIDs:           existingArchiveIDs,
 		cancelChan:                   cancelChan,
+		logger:                       logger,
 		totalArchivesCount:           len(index.Archives),
 		totalDownloadedArchivesCount: len(existingArchiveIDs),
 		archiveDownloadProgress:      make(map[string]int64),
 		archiveDownloadCancel:        make(map[string]chan struct{}),
-		pollingInterval:              1 * time.Second, // Default production polling interval
+		pollingInterval:              1 * time.Second,  // Default production polling interval
+		pollingTimeout:               30 * time.Second, // Default production polling timeout
 	}
 }
 
@@ -69,6 +73,13 @@ func (d *CodexArchiveDownloader) SetPollingInterval(interval time.Duration) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.pollingInterval = interval
+}
+
+// SetPollingTimeout sets the timeout for HasCid polling (useful for testing)
+func (d *CodexArchiveDownloader) SetPollingTimeout(timeout time.Duration) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.pollingTimeout = timeout
 }
 
 // SetOnArchiveDownloaded sets a callback function to be called when an archive is successfully downloaded
@@ -99,13 +110,6 @@ func (d *CodexArchiveDownloader) GetPendingArchivesCount() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return len(d.archiveDownloadCancel)
-}
-
-// GetCurrentArchiveHash returns the hash of the currently downloading archive
-func (d *CodexArchiveDownloader) GetCurrentArchiveHash() string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	return d.currentArchiveHash
 }
 
 // GetArchiveDownloadProgress returns the download progress for a specific archive
@@ -210,7 +214,6 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 		archiveCancelChan := make(chan struct{})
 
 		d.mu.Lock()
-		d.currentArchiveHash = archive.hash
 		d.archiveDownloadProgress[archive.hash] = 0
 		d.archiveDownloadCancel[archive.hash] = archiveCancelChan
 		d.mu.Unlock()
@@ -222,52 +225,66 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 
 		// Trigger archive download and track progress in a goroutine
 		go func(archiveHash, archiveCid string, archiveFrom, archiveTo uint64, archiveCancel chan struct{}) {
+			defer func() {
+				// Always clean up: remove from active downloads and check completion
+				d.mu.Lock()
+				delete(d.archiveDownloadCancel, archiveHash)
+				d.downloadComplete = len(d.archiveDownloadCancel) == 0
+				d.mu.Unlock()
+			}()
+
 			err := d.triggerSingleArchiveDownload(archiveHash, archiveCid, archiveCancel)
-
-			// Update shared state with minimal lock scope
-			d.mu.Lock()
-			if err == nil {
-				d.totalDownloadedArchivesCount++
+			if err != nil {
+				// Don't proceed to polling if trigger failed (could be cancellation or other error)
+				d.logger.Debug("failed to trigger download",
+					zap.String("cid", archiveCid),
+					zap.String("hash", archiveHash),
+					zap.Error(err))
+				return
 			}
-			d.mu.Unlock()
 
-			// poll at configured interval until we confirm it's downloaded
-			// or timeout after 30 seconds
-			timeout := time.After(30 * time.Second)
+			// Poll at configured interval until we confirm it's downloaded
+			// or timeout, or get cancelled
+			timeout := time.After(d.pollingTimeout)
 			ticker := time.NewTicker(d.pollingInterval)
 			defer ticker.Stop()
-		PollLoop:
+
 			for {
 				select {
 				case <-timeout:
-					log.Printf("timeout waiting for CID %s to be available locally", archiveCid)
-					break PollLoop
+					d.logger.Debug("timeout waiting for CID to be available locally",
+						zap.String("cid", archiveCid),
+						zap.String("hash", archiveHash),
+						zap.Duration("timeout", d.pollingTimeout))
+					return // Exit without success callback or count increment
+				case <-archiveCancel:
+					d.logger.Debug("download cancelled",
+						zap.String("cid", archiveCid),
+						zap.String("hash", archiveHash))
+					return // Exit without success callback or count increment
 				case <-ticker.C:
 					hasCid, err := d.codexClient.HasCid(archiveCid)
 					if err != nil {
 						// Log error but continue polling
-						log.Printf("error checking CID %s: %v", archiveCid, err)
+						d.logger.Debug("error checking CID availability",
+							zap.String("cid", archiveCid),
+							zap.String("hash", archiveHash),
+							zap.Error(err))
 						continue
 					}
 					if hasCid {
-						// CID is now available locally
-						break PollLoop
+						// CID is now available locally - handle success immediately
+						d.mu.Lock()
+						d.totalDownloadedArchivesCount++
+						d.mu.Unlock()
+
+						// Call success callback
+						if d.onArchiveDownloaded != nil {
+							d.onArchiveDownloaded(archiveHash, archiveFrom, archiveTo)
+						}
+						return // Exit after successful completion
 					}
 				}
-			}
-
-			// Update shared state with minimal lock scope
-			d.mu.Lock()
-			// Remove from active downloads
-			delete(d.archiveDownloadCancel, archiveHash)
-
-			// Check if all downloads are complete
-			d.downloadComplete = len(d.archiveDownloadCancel) == 0
-			d.mu.Unlock()
-
-			// Call the callback outside the lock to avoid blocking other operations
-			if d.onArchiveDownloaded != nil {
-				d.onArchiveDownloaded(archiveHash, archiveFrom, archiveTo)
 			}
 		}(archive.hash, archive.cid, archive.from, archive.to, archiveCancelChan)
 	}

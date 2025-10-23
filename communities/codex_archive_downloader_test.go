@@ -16,6 +16,7 @@ import (
 	"go-codex-client/protobuf"
 
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 )
 
 // CodexArchiveDownloaderTestifySuite demonstrates testify's suite functionality
@@ -67,7 +68,8 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestBasicSingleArchive() {
 	)
 
 	// Create downloader with mock client
-	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, suite.index, communityID, existingArchiveIDs, cancelChan)
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, suite.index, communityID, existingArchiveIDs, cancelChan, logger)
 
 	// Set fast polling interval for tests (10ms instead of default 1s)
 	downloader.SetPollingInterval(10 * time.Millisecond)
@@ -153,7 +155,8 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 	}
 
 	// Create downloader
-	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, index, communityID, existingArchiveIDs, cancelChan)
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, index, communityID, existingArchiveIDs, cancelChan, logger)
 	downloader.SetPollingInterval(10 * time.Millisecond)
 
 	// Track the order in which archives are started (deterministic)
@@ -199,6 +202,268 @@ func (suite *CodexArchiveDownloaderTestifySuite) TestMultipleArchives() {
 	suite.T().Log("✅ Multiple archives test passed")
 	suite.T().Logf("   - Completed %d out of %d archives", len(completedArchives), 3)
 	suite.T().Logf("   - Start order (sorted): %v", startOrder)
+}
+
+func (suite *CodexArchiveDownloaderTestifySuite) TestCancellationDuringTriggerDownload() {
+	// Test that cancellation during TriggerDownloadWithContext is handled properly
+	communityID := "test-community"
+	existingArchiveIDs := []string{} // No existing archives
+	cancelChan := make(chan struct{})
+
+	// Mock TriggerDownloadWithContext to simulate a cancellation error
+	suite.mockClient.EXPECT().
+		TriggerDownloadWithContext(gomock.Any(), "test-cid-1").
+		Return(nil, assert.AnError). // Return a generic error to simulate failure
+		Times(1)
+
+	// No HasCid calls should be made since TriggerDownload fails
+	// (this is the key test - we shouldn't proceed to polling)
+
+	// Create downloader with mock client
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, suite.index, communityID, existingArchiveIDs, cancelChan, logger)
+	downloader.SetPollingInterval(10 * time.Millisecond)
+
+	// Track callbacks - onArchiveDownloaded should NOT be called on failure
+	var callbackInvoked bool
+	var startCallbackInvoked bool
+
+	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
+		callbackInvoked = true
+	})
+
+	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startCallbackInvoked = true
+	})
+
+	// Start the download
+	downloader.StartDownload()
+
+	// Wait a bit to ensure the goroutine has time to complete
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify the state - download should be marked complete (no pending downloads)
+	// but no archives should be successfully downloaded
+	assert.True(suite.T(), startCallbackInvoked, "Start callback should be invoked")
+	assert.False(suite.T(), callbackInvoked, "Success callback should NOT be invoked on failure")
+	assert.Equal(suite.T(), 0, downloader.GetTotalDownloadedArchivesCount(), "No archives should be downloaded on failure")
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete (no pending downloads)")
+	assert.Equal(suite.T(), 0, downloader.GetPendingArchivesCount(), "No archives should be pending")
+
+	suite.T().Log("✅ Cancellation during trigger download test passed")
+	suite.T().Log("   - TriggerDownload failed as expected")
+	suite.T().Log("   - No polling occurred (as intended)")
+	suite.T().Log("   - Success callback was NOT invoked")
+}
+
+func (suite *CodexArchiveDownloaderTestifySuite) TestCancellationDuringPolling() {
+	// Test that cancellation during the polling phase is handled properly
+	communityID := "test-community"
+	existingArchiveIDs := []string{} // No existing archives
+	cancelChan := make(chan struct{})
+
+	// Mock successful TriggerDownload
+	suite.mockClient.EXPECT().
+		TriggerDownloadWithContext(gomock.Any(), "test-cid-1").
+		Return(&communities.CodexManifest{CID: "test-cid-1"}, nil).
+		Times(1)
+
+	// Mock polling - allow multiple calls, but we'll cancel before completion
+	suite.mockClient.EXPECT().
+		HasCid("test-cid-1").
+		Return(false, nil).
+		AnyTimes() // Allow multiple calls since timing is unpredictable
+
+	// Create downloader with mock client
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, suite.index, communityID, existingArchiveIDs, cancelChan, logger)
+	downloader.SetPollingInterval(50 * time.Millisecond) // Longer interval to allow cancellation
+	downloader.SetPollingTimeout(1 * time.Second)        // Short timeout for test (instead of 30s)
+
+	// Track callbacks
+	var successCallbackInvoked bool
+	var startCallbackInvoked bool
+
+	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
+		successCallbackInvoked = true
+	})
+
+	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startCallbackInvoked = true
+	})
+
+	// Start the download
+	downloader.StartDownload()
+
+	// Wait for the download to start and first poll to occur
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify initial state
+	assert.True(suite.T(), startCallbackInvoked, "Start callback should be invoked")
+	assert.Equal(suite.T(), 1, downloader.GetPendingArchivesCount(), "Should have 1 pending download")
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Download should not be complete yet")
+
+	// Cancel the entire operation
+	close(cancelChan)
+
+	// Wait for cancellation to propagate
+	require.Eventually(suite.T(), func() bool {
+		return downloader.IsDownloadComplete()
+	}, 2*time.Second, 50*time.Millisecond, "Download should complete after cancellation")
+
+	// Verify final state
+	assert.False(suite.T(), successCallbackInvoked, "Success callback should NOT be invoked on cancellation")
+	assert.Equal(suite.T(), 0, downloader.GetPendingArchivesCount(), "No archives should be pending after cancellation")
+	assert.True(suite.T(), downloader.IsCancelled(), "Downloader should be marked as cancelled")
+
+	suite.T().Log("✅ Cancellation during polling test passed")
+	suite.T().Log("   - TriggerDownload succeeded")
+	suite.T().Log("   - Polling started but was cancelled")
+	suite.T().Log("   - Success callback was NOT invoked")
+	suite.T().Log("   - Download marked as cancelled")
+}
+
+func (suite *CodexArchiveDownloaderTestifySuite) TestPollingTimeout() {
+	// Test that polling timeout is handled properly (no success callback)
+	communityID := "test-community"
+	existingArchiveIDs := []string{} // No existing archives
+	cancelChan := make(chan struct{})
+
+	// Mock successful TriggerDownload
+	suite.mockClient.EXPECT().
+		TriggerDownloadWithContext(gomock.Any(), "test-cid-1").
+		Return(&communities.CodexManifest{CID: "test-cid-1"}, nil).
+		Times(1)
+
+	// Mock polling to always return false (simulating timeout)
+	suite.mockClient.EXPECT().
+		HasCid("test-cid-1").
+		Return(false, nil).
+		AnyTimes() // Will be called multiple times until timeout
+
+	// Create downloader with mock client
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, suite.index, communityID, existingArchiveIDs, cancelChan, logger)
+	downloader.SetPollingInterval(10 * time.Millisecond) // Fast polling for test
+	downloader.SetPollingTimeout(100 * time.Millisecond) // Short timeout for test (instead of 30s)
+
+	// Track callbacks
+	var successCallbackInvoked bool
+	var startCallbackInvoked bool
+
+	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
+		successCallbackInvoked = true
+	})
+
+	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startCallbackInvoked = true
+	})
+
+	// Start the download
+	downloader.StartDownload()
+
+	// Wait for timeout (100ms configured timeout)
+	// We'll wait a bit longer to ensure timeout occurs
+	require.Eventually(suite.T(), func() bool {
+		return downloader.IsDownloadComplete()
+	}, 500*time.Millisecond, 50*time.Millisecond, "Download should complete after timeout")
+
+	// Verify state after timeout
+	assert.True(suite.T(), startCallbackInvoked, "Start callback should be invoked")
+	assert.False(suite.T(), successCallbackInvoked, "Success callback should NOT be invoked on timeout")
+	assert.Equal(suite.T(), 0, downloader.GetTotalDownloadedArchivesCount(), "No archives should be downloaded on timeout")
+	assert.Equal(suite.T(), 0, downloader.GetPendingArchivesCount(), "No archives should be pending after timeout")
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete")
+
+	suite.T().Log("✅ Polling timeout test passed")
+	suite.T().Log("   - TriggerDownload succeeded")
+	suite.T().Log("   - Polling timed out after 100ms (fast test)")
+	suite.T().Log("   - Success callback was NOT invoked")
+}
+
+func (suite *CodexArchiveDownloaderTestifySuite) TestWithExistingArchives() {
+	// Test with some archives already downloaded (existing archive IDs)
+	index := &protobuf.CodexWakuMessageArchiveIndex{
+		Archives: map[string]*protobuf.CodexWakuMessageArchiveIndexMetadata{
+			"archive-1": {
+				Cid:      "cid-1",
+				Metadata: &protobuf.WakuMessageArchiveMetadata{From: 1000, To: 2000},
+			},
+			"archive-2": {
+				Cid:      "cid-2",
+				Metadata: &protobuf.WakuMessageArchiveMetadata{From: 2000, To: 3000},
+			},
+			"archive-3": {
+				Cid:      "cid-3",
+				Metadata: &protobuf.WakuMessageArchiveMetadata{From: 3000, To: 4000},
+			},
+		},
+	}
+
+	communityID := "test-community"
+	// Simulate that we already have archive-1 and archive-3
+	existingArchiveIDs := []string{"archive-1", "archive-3"}
+	cancelChan := make(chan struct{})
+
+	// Only archive-2 should be downloaded (not in existingArchiveIDs)
+	suite.mockClient.EXPECT().
+		TriggerDownloadWithContext(gomock.Any(), "cid-2").
+		Return(&communities.CodexManifest{CID: "cid-2"}, nil).
+		Times(1) // Only one call expected
+
+	// Only archive-2 should be polled
+	gomock.InOrder(
+		suite.mockClient.EXPECT().HasCid("cid-2").Return(false, nil),
+		suite.mockClient.EXPECT().HasCid("cid-2").Return(true, nil),
+	)
+
+	// Create downloader with existing archives
+	logger := zap.NewNop() // No-op logger for tests
+	downloader := communities.NewCodexArchiveDownloader(suite.mockClient, index, communityID, existingArchiveIDs, cancelChan, logger)
+	downloader.SetPollingInterval(10 * time.Millisecond)
+
+	// Track which archives are started and completed
+	var startedArchives []string
+	var completedArchives []string
+
+	downloader.SetOnStartingArchiveDownload(func(hash string, from, to uint64) {
+		startedArchives = append(startedArchives, hash)
+	})
+
+	downloader.SetOnArchiveDownloaded(func(hash string, from, to uint64) {
+		completedArchives = append(completedArchives, hash)
+	})
+
+	// Verify initial state - should start with 2 existing archives counted
+	assert.Equal(suite.T(), 3, downloader.GetTotalArchivesCount(), "Should have 3 total archives")
+	assert.Equal(suite.T(), 2, downloader.GetTotalDownloadedArchivesCount(), "Should start with 2 existing archives")
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Should not be complete initially")
+
+	// Start download
+	downloader.StartDownload()
+
+	// Wait for download to complete
+	require.Eventually(suite.T(), func() bool {
+		return downloader.IsDownloadComplete()
+	}, 5*time.Second, 100*time.Millisecond, "Download should complete within 5 seconds")
+
+	// Verify final state
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete")
+	assert.Equal(suite.T(), 3, downloader.GetTotalDownloadedArchivesCount(), "Should have 3 total downloaded (2 existing + 1 new)")
+
+	// Verify only missing archive was processed
+	assert.Len(suite.T(), startedArchives, 1, "Should have started exactly 1 archive download")
+	assert.Contains(suite.T(), startedArchives, "archive-2", "Should have started archive-2")
+	assert.NotContains(suite.T(), startedArchives, "archive-1", "Should NOT have started archive-1 (existing)")
+	assert.NotContains(suite.T(), startedArchives, "archive-3", "Should NOT have started archive-3 (existing)")
+
+	assert.Len(suite.T(), completedArchives, 1, "Should have completed exactly 1 archive download")
+	assert.Contains(suite.T(), completedArchives, "archive-2", "Should have completed archive-2")
+
+	suite.T().Log("✅ Existing archives test passed")
+	suite.T().Logf("   - Started with %d existing archives", len(existingArchiveIDs))
+	suite.T().Logf("   - Downloaded %d missing archives", len(completedArchives))
+	suite.T().Logf("   - Final count: %d total", downloader.GetTotalDownloadedArchivesCount())
 }
 
 // Run the test suite
