@@ -23,18 +23,6 @@ type CodexClient struct {
 	Client  *http.Client
 }
 
-type CodexManifest struct {
-	CID      string `json:"cid"`
-	Manifest struct {
-		TreeCid     string `json:"treeCid"`
-		DatasetSize int64  `json:"datasetSize"`
-		BlockSize   int    `json:"blockSize"`
-		Protected   bool   `json:"protected"`
-		Filename    string `json:"filename"`
-		Mimetype    string `json:"mimetype"`
-	} `json:"manifest"`
-}
-
 // NewCodexClient creates a new Codex client
 func NewCodexClient(host string, port string) *CodexClient {
 	return &CodexClient{
