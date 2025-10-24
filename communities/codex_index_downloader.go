@@ -42,32 +42,27 @@ func NewCodexIndexDownloader(codexClient CodexClientInterface, indexCid string, 
 func (d *CodexIndexDownloader) GotManifest() <-chan struct{} {
 	ch := make(chan struct{})
 
+	// Create cancellable context
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Monitor for cancellation in separate goroutine
 	go func() {
+		select {
+		case <-d.cancelChan:
+			cancel() // Cancel fetch immediately
+		case <-ctx.Done():
+			// Context already cancelled, nothing to do
+		}
+	}()
+
+	go func() {
+		defer cancel() // Ensure context is cancelled when fetch completes or fails
+
 		// Reset datasetSize to 0 to indicate no successful fetch yet
 		d.mu.Lock()
 		d.datasetSize = 0
 		d.downloadError = nil
 		d.mu.Unlock()
-
-		// Check for cancellation before starting
-		select {
-		case <-d.cancelChan:
-			return // Exit without closing channel - cancellation
-		default:
-		}
-
-		// Create cancellable context for HTTP request
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		// Monitor for cancellation in separate goroutine
-		go func() {
-			select {
-			case <-d.cancelChan:
-				cancel()
-			case <-ctx.Done():
-			}
-		}()
 
 		// Fetch manifest from Codex
 		manifest, err := d.codexClient.FetchManifestWithContext(ctx, d.indexCid)
