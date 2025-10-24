@@ -583,3 +583,183 @@ func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
 		}
 	}
 }
+
+func TestFetchManifestWithContext_Success(t *testing.T) {
+	testCid := "zDvZRwzmTestCID"
+	expectedManifest := `{
+		"cid": "zDvZRwzmTestCID",
+		"manifest": {
+			"treeCid": "zDvZRwzmTreeCID123",
+			"datasetSize": 1024,
+			"blockSize": 256,
+			"protected": true,
+			"filename": "test-file.bin",
+			"mimetype": "application/octet-stream"
+		}
+	}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		expectedPath := fmt.Sprintf("/api/codex/v1/data/%s/network/manifest", testCid)
+		if r.URL.Path != expectedPath {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(expectedManifest))
+	}))
+	defer server.Close()
+
+	client := communities.NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.FetchManifestWithContext(ctx, testCid)
+	if err != nil {
+		t.Fatalf("Expected no error, got: %v", err)
+	}
+
+	if manifest == nil {
+		t.Fatal("Expected manifest, got nil")
+	}
+
+	if manifest.CID != testCid {
+		t.Errorf("Expected CID %s, got %s", testCid, manifest.CID)
+	}
+
+	if manifest.Manifest.TreeCid != "zDvZRwzmTreeCID123" {
+		t.Errorf("Expected TreeCid %s, got %s", "zDvZRwzmTreeCID123", manifest.Manifest.TreeCid)
+	}
+
+	if manifest.Manifest.DatasetSize != 1024 {
+		t.Errorf("Expected DatasetSize %d, got %d", 1024, manifest.Manifest.DatasetSize)
+	}
+
+	if manifest.Manifest.BlockSize != 256 {
+		t.Errorf("Expected BlockSize %d, got %d", 256, manifest.Manifest.BlockSize)
+	}
+
+	if !manifest.Manifest.Protected {
+		t.Error("Expected Protected to be true, got false")
+	}
+
+	if manifest.Manifest.Filename != "test-file.bin" {
+		t.Errorf("Expected Filename %s, got %s", "test-file.bin", manifest.Manifest.Filename)
+	}
+
+	if manifest.Manifest.Mimetype != "application/octet-stream" {
+		t.Errorf("Expected Mimetype %s, got %s", "application/octet-stream", manifest.Manifest.Mimetype)
+	}
+}
+
+func TestFetchManifestWithContext_RequestError(t *testing.T) {
+	client := communities.NewCodexClient("invalid-host", "8080")
+
+	ctx := context.Background()
+	manifest, err := client.FetchManifestWithContext(ctx, "test-cid")
+	if err == nil {
+		t.Fatal("Expected error for invalid host, got nil")
+	}
+	if manifest != nil {
+		t.Fatal("Expected nil manifest on error, got non-nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to fetch manifest from codex") {
+		t.Errorf("Expected 'failed to fetch manifest from codex' in error message, got: %v", err)
+	}
+}
+
+func TestFetchManifestWithContext_HTTPError(t *testing.T) {
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Manifest not found"))
+	}))
+	defer server.Close()
+
+	client := communities.NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.FetchManifestWithContext(ctx, testCid)
+	if err == nil {
+		t.Fatal("Expected error for HTTP 404, got nil")
+	}
+	if manifest != nil {
+		t.Fatal("Expected nil manifest on error, got non-nil")
+	}
+
+	if !strings.Contains(err.Error(), "404") {
+		t.Errorf("Expected '404' in error message, got: %v", err)
+	}
+}
+
+func TestFetchManifestWithContext_JSONParseError(t *testing.T) {
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("invalid json {"))
+	}))
+	defer server.Close()
+
+	client := communities.NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	ctx := context.Background()
+	manifest, err := client.FetchManifestWithContext(ctx, testCid)
+	if err == nil {
+		t.Fatal("Expected error for invalid JSON, got nil")
+	}
+	if manifest != nil {
+		t.Fatal("Expected nil manifest on JSON parse error, got non-nil")
+	}
+
+	if !strings.Contains(err.Error(), "failed to parse manifest") {
+		t.Errorf("Expected 'failed to parse manifest' in error message, got: %v", err)
+	}
+}
+
+func TestFetchManifestWithContext_Cancellation(t *testing.T) {
+	testCid := "zDvZRwzmTestCID"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Simulate a slow response
+		time.Sleep(100 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"cid": "test"}`))
+	}))
+	defer server.Close()
+
+	client := communities.NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
+
+	// Create a context with a very short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	manifest, err := client.FetchManifestWithContext(ctx, testCid)
+	if err == nil {
+		t.Fatal("Expected context cancellation error, got nil")
+	}
+	if manifest != nil {
+		t.Fatal("Expected nil manifest on cancellation, got non-nil")
+	}
+
+	// Accept either canceled or deadline exceeded depending on timing
+	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+		// net/http may wrap the context error; check error string as a fallback
+		es := err.Error()
+		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
+			t.Fatalf("expected context cancellation, got: %v", err)
+		}
+	}
+}

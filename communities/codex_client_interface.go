@@ -31,6 +31,9 @@ type CodexClientInterface interface {
 	TriggerDownload(cid string) (*CodexManifest, error)
 	TriggerDownloadWithContext(ctx context.Context, cid string) (*CodexManifest, error)
 
+	// Manifest methods
+	FetchManifestWithContext(ctx context.Context, cid string) (*CodexManifest, error)
+
 	// CID management methods
 	HasCid(cid string) (bool, error)
 	RemoveCid(cid string) error

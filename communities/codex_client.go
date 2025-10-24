@@ -23,6 +23,18 @@ type CodexClient struct {
 	Client  *http.Client
 }
 
+type CodexManifest struct {
+	CID      string `json:"cid"`
+	Manifest struct {
+		TreeCid     string `json:"treeCid"`
+		DatasetSize int64  `json:"datasetSize"`
+		BlockSize   int    `json:"blockSize"`
+		Protected   bool   `json:"protected"`
+		Filename    string `json:"filename"`
+		Mimetype    string `json:"mimetype"`
+	} `json:"manifest"`
+}
+
 // NewCodexClient creates a new Codex client
 func NewCodexClient(host string, port string) *CodexClient {
 	return &CodexClient{
@@ -179,17 +191,32 @@ func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string, 
 	return c.copyWithContext(ctx, output, resp.Body)
 }
 
-// CodexManifest represents the manifest returned by async download
-type CodexManifest struct {
-	CID      string `json:"cid"`
-	Manifest struct {
-		TreeCid     string `json:"treeCid"`
-		DatasetSize int64  `json:"datasetSize"`
-		BlockSize   int    `json:"blockSize"`
-		Protected   bool   `json:"protected"`
-		Filename    string `json:"filename"`
-		Mimetype    string `json:"mimetype"`
-	} `json:"manifest"`
+func (c *CodexClient) FetchManifestWithContext(ctx context.Context, cid string) (*CodexManifest, error) {
+	url := fmt.Sprintf("%s/api/codex/v1/data/%s/network/manifest", c.BaseURL, cid)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch manifest from codex: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("codex fetch manifest failed with status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Parse JSON response containing manifest
+	var manifest CodexManifest
+	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
+		return nil, fmt.Errorf("failed to parse manifest: %w", err)
+	}
+
+	return &manifest, nil
 }
 
 func (c *CodexClient) TriggerDownloadWithContext(ctx context.Context, cid string) (*CodexManifest, error) {

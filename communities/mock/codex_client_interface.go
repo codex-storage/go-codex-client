@@ -71,6 +71,21 @@ func (mr *MockCodexClientInterfaceMockRecorder) DownloadWithContext(ctx, cid, ou
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DownloadWithContext", reflect.TypeOf((*MockCodexClientInterface)(nil).DownloadWithContext), ctx, cid, output)
 }
 
+// FetchManifestWithContext mocks base method.
+func (m *MockCodexClientInterface) FetchManifestWithContext(ctx context.Context, cid string) (*communities.CodexManifest, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchManifestWithContext", ctx, cid)
+	ret0, _ := ret[0].(*communities.CodexManifest)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchManifestWithContext indicates an expected call of FetchManifestWithContext.
+func (mr *MockCodexClientInterfaceMockRecorder) FetchManifestWithContext(ctx, cid any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchManifestWithContext", reflect.TypeOf((*MockCodexClientInterface)(nil).FetchManifestWithContext), ctx, cid)
+}
+
 // HasCid mocks base method.
 func (m *MockCodexClientInterface) HasCid(cid string) (bool, error) {
 	m.ctrl.T.Helper()

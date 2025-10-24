@@ -2,10 +2,7 @@ package communities
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
 	"os"
 )
 
@@ -73,41 +70,20 @@ func (d *CodexIndexDownloader) GotManifest() <-chan struct{} {
 		}()
 
 		// Fetch manifest from Codex
-		url := fmt.Sprintf("%s/api/codex/v1/data/%s/network/manifest", d.codexClient.BaseURL, d.indexCid)
-
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			return
-		}
-
-		resp, err := d.codexClient.Client.Do(req)
+		manifest, err := d.codexClient.FetchManifestWithContext(ctx, d.indexCid)
 		if err != nil {
 			// Don't close channel on error - let timeout handle it
-			return
-		}
-		defer resp.Body.Close()
-
-		// Check if request was successful
-		if resp.StatusCode != http.StatusOK {
-			// Don't close channel on error - let timeout handle it
-			return
-		}
-
-		// Parse the JSON response
-		var manifestResp ManifestResponse
-		if err := json.NewDecoder(resp.Body).Decode(&manifestResp); err != nil {
-			// Don't close channel on error - let timeout handle it
+			// This is to fit better in the original status-go app
 			return
 		}
 
 		// Verify that the CID matches our configured indexCid
-		if manifestResp.CID != d.indexCid {
-			// Don't close channel on error - let timeout handle it
+		if manifest.CID != d.indexCid {
 			return
 		}
 
 		// Store the dataset size for later use - this indicates success
-		d.datasetSize = manifestResp.Manifest.DatasetSize
+		d.datasetSize = manifest.Manifest.DatasetSize
 
 		// Success! Close the channel to signal completion
 		close(ch)
