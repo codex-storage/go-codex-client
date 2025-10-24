@@ -1,5 +1,5 @@
-//go:build integration && !disable_torrent
-// +build integration,!disable_torrent
+//go:build integration
+// +build integration
 
 package communities_test
 

@@ -1,6 +1,3 @@
-//go:build !disable_torrent
-// +build !disable_torrent
-
 package communities
 
 import (
