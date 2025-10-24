@@ -4,38 +4,29 @@ import (
 	"context"
 	"io"
 	"os"
-)
 
-// ManifestResponse represents the response from Codex manifest API
-type ManifestResponse struct {
-	CID      string `json:"cid"`
-	Manifest struct {
-		TreeCID     string `json:"treeCid"`
-		DatasetSize int64  `json:"datasetSize"`
-		BlockSize   int    `json:"blockSize"`
-		Protected   bool   `json:"protected"`
-		Filename    string `json:"filename"`
-		Mimetype    string `json:"mimetype"`
-	} `json:"manifest"`
-}
+	"go.uber.org/zap"
+)
 
 // CodexIndexDownloader handles downloading index files from Codex storage
 type CodexIndexDownloader struct {
-	codexClient    *CodexClient
+	codexClient    CodexClientInterface
 	indexCid       string
 	filePath       string
 	datasetSize    int64           // stores the dataset size from the manifest
 	bytesCompleted int64           // tracks download progress
 	cancelChan     <-chan struct{} // for cancellation support
+	logger         *zap.Logger
 }
 
 // NewCodexIndexDownloader creates a new index downloader
-func NewCodexIndexDownloader(codexClient *CodexClient, indexCid string, filePath string, cancelChan <-chan struct{}) *CodexIndexDownloader {
+func NewCodexIndexDownloader(codexClient CodexClientInterface, indexCid string, filePath string, cancelChan <-chan struct{}, logger *zap.Logger) *CodexIndexDownloader {
 	return &CodexIndexDownloader{
 		codexClient: codexClient,
 		indexCid:    indexCid,
 		filePath:    filePath,
 		cancelChan:  cancelChan,
+		logger:      logger,
 	}
 }
 
@@ -72,6 +63,9 @@ func (d *CodexIndexDownloader) GotManifest() <-chan struct{} {
 		// Fetch manifest from Codex
 		manifest, err := d.codexClient.FetchManifestWithContext(ctx, d.indexCid)
 		if err != nil {
+			d.logger.Debug("failed to fetch manifest",
+				zap.String("indexCid", d.indexCid),
+				zap.Error(err))
 			// Don't close channel on error - let timeout handle it
 			// This is to fit better in the original status-go app
 			return
@@ -79,6 +73,9 @@ func (d *CodexIndexDownloader) GotManifest() <-chan struct{} {
 
 		// Verify that the CID matches our configured indexCid
 		if manifest.CID != d.indexCid {
+			d.logger.Debug("manifest CID mismatch",
+				zap.String("expected", d.indexCid),
+				zap.String("got", manifest.CID))
 			return
 		}
 
@@ -98,7 +95,7 @@ func (d *CodexIndexDownloader) GetDatasetSize() int64 {
 }
 
 // DownloadIndexFile starts downloading the index file from Codex and writes it to the configured file path
-func (d *CodexIndexDownloader) DownloadIndexFile() error {
+func (d *CodexIndexDownloader) DownloadIndexFile() {
 	// Reset progress counter
 	d.bytesCompleted = 0
 
@@ -127,7 +124,9 @@ func (d *CodexIndexDownloader) DownloadIndexFile() error {
 		// Create the output file
 		file, err := os.Create(d.filePath)
 		if err != nil {
-			// TODO: Consider logging the error or exposing it somehow
+			d.logger.Debug("failed to create file",
+				zap.String("filePath", d.filePath),
+				zap.Error(err))
 			return
 		}
 		defer file.Close()
@@ -141,12 +140,13 @@ func (d *CodexIndexDownloader) DownloadIndexFile() error {
 		// Use CodexClient to download and stream to file with context for cancellation
 		err = d.codexClient.DownloadWithContext(ctx, d.indexCid, progressWriter)
 		if err != nil {
-			// TODO: Consider logging the error or exposing it somehow
+			d.logger.Debug("failed to download index file",
+				zap.String("indexCid", d.indexCid),
+				zap.String("filePath", d.filePath),
+				zap.Error(err))
 			return
 		}
 	}()
-
-	return nil
 }
 
 // BytesCompleted returns the number of bytes downloaded so far

@@ -32,8 +32,8 @@ type CodexArchiveDownloaderIntegrationSuite struct {
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexArchiveDownloaderIntegrationSuite) SetupSuite() {
 	// Use port 8001 as specified by the user
-	host := getEnvWithDefault("CODEX_HOST", "localhost")
-	port := getEnvWithDefault("CODEX_API_PORT", "8001")
+	host := communities.GetEnvOrDefault("CODEX_HOST", "localhost")
+	port := communities.GetEnvOrDefault("CODEX_API_PORT", "8001")
 	suite.client = communities.NewCodexClient(host, port)
 
 	// Optional request timeout override
@@ -223,12 +223,4 @@ func (suite *CodexArchiveDownloaderIntegrationSuite) TestFullArchiveDownloadWork
 // Run the integration test suite
 func TestCodexArchiveDownloaderIntegrationSuite(t *testing.T) {
 	suite.Run(t, new(CodexArchiveDownloaderIntegrationSuite))
-}
-
-// Helper function for environment variables with defaults
-func getEnvWithDefault(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
 }

@@ -34,8 +34,8 @@ type CodexClientIntegrationTestSuite struct {
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexClientIntegrationTestSuite) SetupSuite() {
-	suite.host = getenv("CODEX_HOST", "localhost")
-	suite.port = getenv("CODEX_API_PORT", "8080")
+	suite.host = communities.GetEnvOrDefault("CODEX_HOST", "localhost")
+	suite.port = communities.GetEnvOrDefault("CODEX_API_PORT", "8080")
 	suite.client = communities.NewCodexClient(suite.host, suite.port)
 
 	// Optional request timeout override
@@ -116,7 +116,7 @@ func (suite *CodexClientIntegrationTestSuite) TestIntegration_CheckNonExistingCI
 func (suite *CodexClientIntegrationTestSuite) TestIntegration_TriggerDownload() {
 	// Use port 8001 for this test as specified
 	client := communities.NewCodexClient(suite.host, "8001")
-	
+
 	// Optional request timeout override
 	if ms := os.Getenv("CODEX_TIMEOUT_MS"); ms != "" {
 		if d, err := time.ParseDuration(ms + "ms"); err == nil {
@@ -248,11 +248,4 @@ func (suite *CodexClientIntegrationTestSuite) TestIntegration_FetchManifest() {
 	_, err = suite.client.FetchManifestWithContext(ctx, nonExistentCID)
 	assert.Error(suite.T(), err, "Expected error when fetching manifest for non-existent CID")
 	suite.T().Logf("Expected error for non-existent CID: %v", err)
-}
-
-func getenv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
 }
