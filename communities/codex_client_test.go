@@ -658,12 +658,17 @@ func TestFetchManifestWithContext_Success(t *testing.T) {
 }
 
 func TestFetchManifestWithContext_RequestError(t *testing.T) {
-	client := communities.NewCodexClient("invalid-host", "8080")
+	// Create a server and immediately close it to trigger connection error
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	server.Close()
+
+	client := communities.NewCodexClient("localhost", "8080")
+	client.BaseURL = server.URL
 
 	ctx := context.Background()
 	manifest, err := client.FetchManifestWithContext(ctx, "test-cid")
 	if err == nil {
-		t.Fatal("Expected error for invalid host, got nil")
+		t.Fatal("Expected error for closed server, got nil")
 	}
 	if manifest != nil {
 		t.Fatal("Expected nil manifest on error, got non-nil")
