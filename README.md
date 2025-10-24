@@ -154,7 +154,7 @@ CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --r
 or to run all integration tests:
 
 ```bash
-CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=integration -v -count 1
+CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=integration -v -count 1 -run Integration
 ```
 
 I prefer to be more selective when running integration tests.

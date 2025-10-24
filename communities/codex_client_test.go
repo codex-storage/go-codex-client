@@ -8,16 +8,44 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"go-codex-client/communities"
 )
 
-func TestUpload_Success(t *testing.T) {
+// CodexClientTestSuite demonstrates testify's suite functionality for CodexClient tests
+type CodexClientTestSuite struct {
+	suite.Suite
+	client *communities.CodexClient
+	server *httptest.Server
+}
+
+// SetupTest runs before each test method
+func (suite *CodexClientTestSuite) SetupTest() {
+	suite.client = communities.NewCodexClient("localhost", "8080")
+}
+
+// TearDownTest runs after each test method
+func (suite *CodexClientTestSuite) TearDownTest() {
+	if suite.server != nil {
+		suite.server.Close()
+		suite.server = nil
+	}
+}
+
+// TestCodexClientTestSuite runs the test suite
+func TestCodexClientTestSuite(t *testing.T) {
+	suite.Run(t, new(CodexClientTestSuite))
+}
+
+func (suite *CodexClientTestSuite) TestUpload_Success() {
 	// Arrange a fake Codex server that validates headers and returns a CID
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -47,29 +75,23 @@ func TestUpload_Success(t *testing.T) {
 		// we add a newline to simulate real response
 		_, _ = w.Write([]byte("zDvZRwzmTestCID123\n"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	// Act
-	cid, err := client.Upload(bytes.NewReader([]byte("payload")), "hello.txt")
+	cid, err := suite.client.Upload(bytes.NewReader([]byte("payload")), "hello.txt")
 
 	// Assert
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	require.NoError(suite.T(), err)
 	// Codex uses CIDv1 with base58btc encoding (prefix: zDv)
-	if cid != "zDvZRwzmTestCID123" {
-		t.Fatalf("unexpected cid: %q", cid)
-	}
+	assert.Equal(suite.T(), "zDvZRwzmTestCID123", cid)
 }
 
-func TestDownload_Success(t *testing.T) {
+func (suite *CodexClientTestSuite) TestDownload_Success() {
 	const wantCID = "zDvZRwzm"
 	const payload = "hello from codex"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -82,24 +104,19 @@ func TestDownload_Success(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(payload))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	var buf bytes.Buffer
-	if err := client.Download(wantCID, &buf); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if got := buf.String(); got != payload {
-		t.Fatalf("unexpected payload: %q", got)
-	}
+	err := suite.client.Download(wantCID, &buf)
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), payload, buf.String())
 }
 
-func TestDownloadWithContext_Cancel(t *testing.T) {
+func (suite *CodexClientTestSuite) TestDownloadWithContext_Cancel() {
 	const cid = "zDvZRwzm"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/codex/v1/data/"+cid+"/network/stream" {
 			w.WriteHeader(http.StatusNotFound)
 			return
@@ -124,29 +141,25 @@ func TestDownloadWithContext_Cancel(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
 	defer cancel()
 
-	err := client.DownloadWithContext(ctx, cid, io.Discard)
-	if err == nil {
-		t.Fatalf("expected cancellation error, got nil")
-	}
+	err := suite.client.DownloadWithContext(ctx, cid, io.Discard)
+	require.Error(suite.T(), err)
 	// Accept either canceled or deadline exceeded depending on timing
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		// net/http may wrap the context error; check error string as a fallback
 		es := err.Error()
 		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
-			t.Fatalf("expected context cancellation, got: %v", err)
+			suite.T().Fatalf("expected context cancellation, got: %v", err)
 		}
 	}
 }
 
-func TestHasCid_Success(t *testing.T) {
+func (suite *CodexClientTestSuite) TestHasCid_Success() {
 	tests := []struct {
 		name     string
 		cid      string
@@ -158,8 +171,8 @@ func TestHasCid_Success(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		suite.Run(tt.name, func() {
+			suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/api/codex/v1/data/"+tt.cid+"/exists" {
 					w.WriteHeader(http.StatusNotFound)
 					return
@@ -169,71 +182,52 @@ func TestHasCid_Success(t *testing.T) {
 				// Return JSON: {"<cid>": <bool>}
 				fmt.Fprintf(w, `{"%s": %t}`, tt.cid, tt.hasIt)
 			}))
-			defer server.Close()
 
-			client := communities.NewCodexClient("localhost", "8080")
-			client.BaseURL = server.URL
+			suite.client.BaseURL = suite.server.URL
 
-			got, err := client.HasCid(tt.cid)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if got != tt.wantBool {
-				t.Fatalf("HasCid(%q) = %v, want %v", tt.cid, got, tt.wantBool)
-			}
+			got, err := suite.client.HasCid(tt.cid)
+			require.NoError(suite.T(), err)
+			assert.Equal(suite.T(), tt.wantBool, got, "HasCid(%q) = %v, want %v", tt.cid, got, tt.wantBool)
 		})
 	}
 }
 
-func TestHasCid_RequestError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestHasCid_RequestError() {
 	// Create a server and immediately close it to trigger connection error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	server.Close() // Close immediately so connection fails
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	suite.server.Close() // Close immediately so connection fails
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL // Use the closed server's URL
+	suite.client.BaseURL = suite.server.URL // Use the closed server's URL
 
-	got, err := client.HasCid("zDvZRwzmTestCID")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if got != false {
-		t.Fatalf("expected false on error, got %v", got)
-	}
+	got, err := suite.client.HasCid("zDvZRwzmTestCID")
+	require.Error(suite.T(), err)
+	assert.False(suite.T(), got, "expected false on error")
 }
 
-func TestHasCid_CidMismatch(t *testing.T) {
+func (suite *CodexClientTestSuite) TestHasCid_CidMismatch() {
 	const requestCid = "zDvZRwzmRequestCID"
 	const responseCid = "zDvZRwzmDifferentCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		// Return a different CID in the response
 		fmt.Fprintf(w, `{"%s": true}`, responseCid)
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
-	got, err := client.HasCid(requestCid)
-	if err == nil {
-		t.Fatal("expected error for CID mismatch, got nil")
-	}
-	if got != false {
-		t.Fatalf("expected false on CID mismatch, got %v", got)
-	}
+	got, err := suite.client.HasCid(requestCid)
+	require.Error(suite.T(), err, "expected error for CID mismatch")
+	assert.False(suite.T(), got, "expected false on CID mismatch")
 	// Check error message mentions the missing/mismatched CID
-	if !strings.Contains(err.Error(), requestCid) {
-		t.Fatalf("error should mention request CID %q, got: %v", requestCid, err)
-	}
+	assert.Contains(suite.T(), err.Error(), requestCid, "error should mention request CID")
 }
 
-func TestRemoveCid_Success(t *testing.T) {
+func (suite *CodexClientTestSuite) TestRemoveCid_Success() {
 	const testCid = "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodDelete {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -245,40 +239,30 @@ func TestRemoveCid_Success(t *testing.T) {
 		// DELETE should return 204 No Content
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
-	err := client.RemoveCid(testCid)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	err := suite.client.RemoveCid(testCid)
+	require.NoError(suite.T(), err)
 }
 
-func TestRemoveCid_Error(t *testing.T) {
+func (suite *CodexClientTestSuite) TestRemoveCid_Error() {
 	const testCid = "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Return error status
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("server error"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
-	err := client.RemoveCid(testCid)
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "500") {
-		t.Fatalf("error should mention status 500, got: %v", err)
-	}
+	err := suite.client.RemoveCid(testCid)
+	require.Error(suite.T(), err)
+	assert.Contains(suite.T(), err.Error(), "500", "error should mention status 500")
 }
 
-func TestTriggerDownload(t *testing.T) {
+func (suite *CodexClientTestSuite) TestTriggerDownload() {
 	const testCid = "zDvZRwzmTestCID"
 	const expectedManifest = `{
 		"cid": "zDvZRwzmTestCID",
@@ -292,7 +276,7 @@ func TestTriggerDownload(t *testing.T) {
 		}
 	}`
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
@@ -305,105 +289,71 @@ func TestTriggerDownload(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(expectedManifest))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if manifest.CID != testCid {
-		t.Fatalf("expected CID %q, got %q", testCid, manifest.CID)
-	}
-	if manifest.Manifest.TreeCid != "zDvZRwzmTreeCID" {
-		t.Fatalf("expected TreeCid %q, got %q", "zDvZRwzmTreeCID", manifest.Manifest.TreeCid)
-	}
-	if manifest.Manifest.DatasetSize != 1024 {
-		t.Fatalf("expected DatasetSize %d, got %d", 1024, manifest.Manifest.DatasetSize)
-	}
-	if manifest.Manifest.Filename != "test-file.bin" {
-		t.Fatalf("expected Filename %q, got %q", "test-file.bin", manifest.Manifest.Filename)
-	}
+	manifest, err := suite.client.TriggerDownloadWithContext(ctx, testCid)
+	require.NoError(suite.T(), err)
+	assert.Equal(suite.T(), testCid, manifest.CID)
+	assert.Equal(suite.T(), "zDvZRwzmTreeCID", manifest.Manifest.TreeCid)
+	assert.Equal(suite.T(), int64(1024), manifest.Manifest.DatasetSize)
+	assert.Equal(suite.T(), "test-file.bin", manifest.Manifest.Filename)
 }
 
-func TestTriggerDownloadWithContext_RequestError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestTriggerDownloadWithContext_RequestError() {
 	// Create a server and immediately close it to trigger connection error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	server.Close()
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	suite.server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.TriggerDownloadWithContext(ctx, "zDvZRwzmRigWseNB7WqmudkKAPgZmrDCE9u5cY4KvCqhRo9Ki")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-	if manifest != nil {
-		t.Fatalf("expected nil manifest on error, got %v", manifest)
-	}
+	manifest, err := suite.client.TriggerDownloadWithContext(ctx, "zDvZRwzmRigWseNB7WqmudkKAPgZmrDCE9u5cY4KvCqhRo9Ki")
+	require.Error(suite.T(), err)
+	assert.Nil(suite.T(), manifest, "expected nil manifest on error")
 }
 
-func TestTriggerDownloadWithContext_JSONParseError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestTriggerDownloadWithContext_JSONParseError() {
 	const testCid = "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		// Return invalid JSON
 		w.Write([]byte(`{"invalid": json}`))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
-	if err == nil {
-		t.Fatal("expected JSON parse error, got nil")
-	}
-	if manifest != nil {
-		t.Fatalf("expected nil manifest on parse error, got %v", manifest)
-	}
-	if !strings.Contains(err.Error(), "failed to parse download manifest") {
-		t.Fatalf("error should mention parse failure, got: %v", err)
-	}
+	manifest, err := suite.client.TriggerDownloadWithContext(ctx, testCid)
+	require.Error(suite.T(), err, "expected JSON parse error")
+	assert.Nil(suite.T(), manifest, "expected nil manifest on parse error")
+	assert.Contains(suite.T(), err.Error(), "failed to parse download manifest", "error should mention parse failure")
 }
 
-func TestTriggerDownloadWithContext_HTTPError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestTriggerDownloadWithContext_HTTPError() {
 	const testCid = "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("CID not found"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
-	if err == nil {
-		t.Fatal("expected error for 404 status, got nil")
-	}
-	if manifest != nil {
-		t.Fatalf("expected nil manifest on HTTP error, got %v", manifest)
-	}
-	if !strings.Contains(err.Error(), "404") {
-		t.Fatalf("error should mention status 404, got: %v", err)
-	}
+	manifest, err := suite.client.TriggerDownloadWithContext(ctx, testCid)
+	require.Error(suite.T(), err, "expected error for 404 status")
+	assert.Nil(suite.T(), manifest, "expected nil manifest on HTTP error")
+	assert.Contains(suite.T(), err.Error(), "404", "error should mention status 404")
 }
 
-func TestTriggerDownloadWithContext_Cancellation(t *testing.T) {
+func (suite *CodexClientTestSuite) TestTriggerDownloadWithContext_Cancellation() {
 	const testCid = "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate slow response to allow cancellation
 		select {
 		case <-r.Context().Done():
@@ -414,177 +364,132 @@ func TestTriggerDownloadWithContext_Cancellation(t *testing.T) {
 			w.Write([]byte(`{"cid": "test"}`))
 		}
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	// Cancel after 50ms (before server responds)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
-	manifest, err := client.TriggerDownloadWithContext(ctx, testCid)
-	if err == nil {
-		t.Fatal("expected cancellation error, got nil")
-	}
-	if manifest != nil {
-		t.Fatalf("expected nil manifest on cancellation, got %v", manifest)
-	}
+	manifest, err := suite.client.TriggerDownloadWithContext(ctx, testCid)
+	require.Error(suite.T(), err, "expected cancellation error")
+	assert.Nil(suite.T(), manifest, "expected nil manifest on cancellation")
 	// Accept either canceled or deadline exceeded depending on timing
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		// net/http may wrap the context error; check error string as a fallback
 		es := err.Error()
 		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
-			t.Fatalf("expected context cancellation, got: %v", err)
+			suite.T().Fatalf("expected context cancellation, got: %v", err)
 		}
 	}
 }
 
-func TestLocalDownload(t *testing.T) {
+func (suite *CodexClientTestSuite) TestLocalDownload() {
 	testData := []byte("test data for local download")
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and path
-		if r.Method != "GET" {
-			t.Errorf("Expected GET request, got %s", r.Method)
-		}
+		assert.Equal(suite.T(), "GET", r.Method, "Expected GET request")
 		expectedPath := "/api/codex/v1/data/" + testCid
-		if r.URL.Path != expectedPath {
-			t.Errorf("Expected path %s, got %s", expectedPath, r.URL.Path)
-		}
+		assert.Equal(suite.T(), expectedPath, r.URL.Path, "Expected correct path")
 
 		w.WriteHeader(http.StatusOK)
 		w.Write(testData)
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	var buf bytes.Buffer
-	err := client.LocalDownload(testCid, &buf)
-	if err != nil {
-		t.Fatalf("LocalDownload failed: %v", err)
-	}
-
-	if !bytes.Equal(buf.Bytes(), testData) {
-		t.Errorf("Downloaded data mismatch. Expected %q, got %q", string(testData), buf.String())
-	}
+	err := suite.client.LocalDownload(testCid, &buf)
+	require.NoError(suite.T(), err, "LocalDownload failed")
+	assert.Equal(suite.T(), testData, buf.Bytes(), "Downloaded data mismatch")
 }
 
-func TestLocalDownloadWithContext_Success(t *testing.T) {
+func (suite *CodexClientTestSuite) TestLocalDownloadWithContext_Success() {
 	testData := []byte("test data for local download with context")
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and path
-		if r.Method != "GET" {
-			t.Errorf("Expected GET request, got %s", r.Method)
-		}
+		assert.Equal(suite.T(), "GET", r.Method, "Expected GET request")
 		expectedPath := "/api/codex/v1/data/" + testCid
-		if r.URL.Path != expectedPath {
-			t.Errorf("Expected path %s, got %s", expectedPath, r.URL.Path)
-		}
+		assert.Equal(suite.T(), expectedPath, r.URL.Path, "Expected correct path")
 
 		w.WriteHeader(http.StatusOK)
 		w.Write(testData)
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	err := client.LocalDownloadWithContext(ctx, testCid, &buf)
-	if err != nil {
-		t.Fatalf("LocalDownloadWithContext failed: %v", err)
-	}
-
-	if !bytes.Equal(buf.Bytes(), testData) {
-		t.Errorf("Downloaded data mismatch. Expected %q, got %q", string(testData), buf.String())
-	}
+	err := suite.client.LocalDownloadWithContext(ctx, testCid, &buf)
+	require.NoError(suite.T(), err, "LocalDownloadWithContext failed")
+	assert.Equal(suite.T(), testData, buf.Bytes(), "Downloaded data mismatch")
 }
 
-func TestLocalDownloadWithContext_RequestError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestLocalDownloadWithContext_RequestError() {
 	// Create a server and immediately close it to trigger connection error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	server.Close()
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	suite.server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	err := client.LocalDownloadWithContext(ctx, "zDvZRwzmTestCID", &buf)
-	if err == nil {
-		t.Fatal("Expected error due to closed server, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "failed to download from codex") {
-		t.Errorf("Expected 'failed to download from codex' in error, got: %v", err)
-	}
+	err := suite.client.LocalDownloadWithContext(ctx, "zDvZRwzmTestCID", &buf)
+	require.Error(suite.T(), err, "Expected error due to closed server")
+	assert.Contains(suite.T(), err.Error(), "failed to download from codex")
 }
 
-func TestLocalDownloadWithContext_HTTPError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestLocalDownloadWithContext_HTTPError() {
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("CID not found in local storage"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
 	var buf bytes.Buffer
-	err := client.LocalDownloadWithContext(ctx, testCid, &buf)
-	if err == nil {
-		t.Fatal("Expected error for HTTP 404, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("Expected '404' in error message, got: %v", err)
-	}
+	err := suite.client.LocalDownloadWithContext(ctx, testCid, &buf)
+	require.Error(suite.T(), err, "Expected error for HTTP 404")
+	assert.Contains(suite.T(), err.Error(), "404", "Expected '404' in error message")
 }
 
-func TestLocalDownloadWithContext_Cancellation(t *testing.T) {
+func (suite *CodexClientTestSuite) TestLocalDownloadWithContext_Cancellation() {
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate a slow response
 		time.Sleep(100 * time.Millisecond)
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("slow response"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	// Create a context with a very short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
 	var buf bytes.Buffer
-	err := client.LocalDownloadWithContext(ctx, testCid, &buf)
-	if err == nil {
-		t.Fatal("Expected context cancellation error, got nil")
-	}
+	err := suite.client.LocalDownloadWithContext(ctx, testCid, &buf)
+	require.Error(suite.T(), err, "Expected context cancellation error")
 	// Accept either canceled or deadline exceeded depending on timing
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		// net/http may wrap the context error; check error string as a fallback
 		es := err.Error()
 		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
-			t.Fatalf("expected context cancellation, got: %v", err)
+			suite.T().Fatalf("expected context cancellation, got: %v", err)
 		}
 	}
 }
 
-func TestFetchManifestWithContext_Success(t *testing.T) {
+func (suite *CodexClientTestSuite) TestFetchManifestWithContext_Success() {
 	testCid := "zDvZRwzmTestCID"
 	expectedManifest := `{
 		"cid": "zDvZRwzmTestCID",
@@ -598,173 +503,108 @@ func TestFetchManifestWithContext_Success(t *testing.T) {
 		}
 	}`
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(suite.T(), http.MethodGet, r.Method)
 		expectedPath := fmt.Sprintf("/api/codex/v1/data/%s/network/manifest", testCid)
-		if r.URL.Path != expectedPath {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
+		assert.Equal(suite.T(), expectedPath, r.URL.Path)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(expectedManifest))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.FetchManifestWithContext(ctx, testCid)
-	if err != nil {
-		t.Fatalf("Expected no error, got: %v", err)
-	}
+	manifest, err := suite.client.FetchManifestWithContext(ctx, testCid)
+	require.NoError(suite.T(), err, "Expected no error")
+	require.NotNil(suite.T(), manifest, "Expected manifest, got nil")
 
-	if manifest == nil {
-		t.Fatal("Expected manifest, got nil")
-	}
-
-	if manifest.CID != testCid {
-		t.Errorf("Expected CID %s, got %s", testCid, manifest.CID)
-	}
-
-	if manifest.Manifest.TreeCid != "zDvZRwzmTreeCID123" {
-		t.Errorf("Expected TreeCid %s, got %s", "zDvZRwzmTreeCID123", manifest.Manifest.TreeCid)
-	}
-
-	if manifest.Manifest.DatasetSize != 1024 {
-		t.Errorf("Expected DatasetSize %d, got %d", 1024, manifest.Manifest.DatasetSize)
-	}
-
-	if manifest.Manifest.BlockSize != 256 {
-		t.Errorf("Expected BlockSize %d, got %d", 256, manifest.Manifest.BlockSize)
-	}
-
-	if !manifest.Manifest.Protected {
-		t.Error("Expected Protected to be true, got false")
-	}
-
-	if manifest.Manifest.Filename != "test-file.bin" {
-		t.Errorf("Expected Filename %s, got %s", "test-file.bin", manifest.Manifest.Filename)
-	}
-
-	if manifest.Manifest.Mimetype != "application/octet-stream" {
-		t.Errorf("Expected Mimetype %s, got %s", "application/octet-stream", manifest.Manifest.Mimetype)
-	}
+	assert.Equal(suite.T(), testCid, manifest.CID)
+	assert.Equal(suite.T(), "zDvZRwzmTreeCID123", manifest.Manifest.TreeCid)
+	assert.Equal(suite.T(), int64(1024), manifest.Manifest.DatasetSize)
+	assert.Equal(suite.T(), 256, manifest.Manifest.BlockSize)
+	assert.True(suite.T(), manifest.Manifest.Protected, "Expected Protected to be true")
+	assert.Equal(suite.T(), "test-file.bin", manifest.Manifest.Filename)
+	assert.Equal(suite.T(), "application/octet-stream", manifest.Manifest.Mimetype)
 }
 
-func TestFetchManifestWithContext_RequestError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestFetchManifestWithContext_RequestError() {
 	// Create a server and immediately close it to trigger connection error
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-	server.Close()
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	suite.server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.FetchManifestWithContext(ctx, "test-cid")
-	if err == nil {
-		t.Fatal("Expected error for closed server, got nil")
-	}
-	if manifest != nil {
-		t.Fatal("Expected nil manifest on error, got non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "failed to fetch manifest from codex") {
-		t.Errorf("Expected 'failed to fetch manifest from codex' in error message, got: %v", err)
-	}
+	manifest, err := suite.client.FetchManifestWithContext(ctx, "test-cid")
+	require.Error(suite.T(), err, "Expected error for closed server")
+	assert.Nil(suite.T(), manifest, "Expected nil manifest on error")
+	assert.Contains(suite.T(), err.Error(), "failed to fetch manifest from codex")
 }
 
-func TestFetchManifestWithContext_HTTPError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestFetchManifestWithContext_HTTPError() {
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("Manifest not found"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.FetchManifestWithContext(ctx, testCid)
-	if err == nil {
-		t.Fatal("Expected error for HTTP 404, got nil")
-	}
-	if manifest != nil {
-		t.Fatal("Expected nil manifest on error, got non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "404") {
-		t.Errorf("Expected '404' in error message, got: %v", err)
-	}
+	manifest, err := suite.client.FetchManifestWithContext(ctx, testCid)
+	require.Error(suite.T(), err, "Expected error for HTTP 404")
+	assert.Nil(suite.T(), manifest, "Expected nil manifest on error")
+	assert.Contains(suite.T(), err.Error(), "404", "Expected '404' in error message")
 }
 
-func TestFetchManifestWithContext_JSONParseError(t *testing.T) {
+func (suite *CodexClientTestSuite) TestFetchManifestWithContext_JSONParseError() {
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("invalid json {"))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	ctx := context.Background()
-	manifest, err := client.FetchManifestWithContext(ctx, testCid)
-	if err == nil {
-		t.Fatal("Expected error for invalid JSON, got nil")
-	}
-	if manifest != nil {
-		t.Fatal("Expected nil manifest on JSON parse error, got non-nil")
-	}
-
-	if !strings.Contains(err.Error(), "failed to parse manifest") {
-		t.Errorf("Expected 'failed to parse manifest' in error message, got: %v", err)
-	}
+	manifest, err := suite.client.FetchManifestWithContext(ctx, testCid)
+	require.Error(suite.T(), err, "Expected error for invalid JSON")
+	assert.Nil(suite.T(), manifest, "Expected nil manifest on JSON parse error")
+	assert.Contains(suite.T(), err.Error(), "failed to parse manifest", "Expected 'failed to parse manifest' in error message")
 }
 
-func TestFetchManifestWithContext_Cancellation(t *testing.T) {
+func (suite *CodexClientTestSuite) TestFetchManifestWithContext_Cancellation() {
 	testCid := "zDvZRwzmTestCID"
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	suite.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Simulate a slow response
 		time.Sleep(100 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"cid": "test"}`))
 	}))
-	defer server.Close()
 
-	client := communities.NewCodexClient("localhost", "8080")
-	client.BaseURL = server.URL
+	suite.client.BaseURL = suite.server.URL
 
 	// Create a context with a very short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	manifest, err := client.FetchManifestWithContext(ctx, testCid)
-	if err == nil {
-		t.Fatal("Expected context cancellation error, got nil")
-	}
-	if manifest != nil {
-		t.Fatal("Expected nil manifest on cancellation, got non-nil")
-	}
+	manifest, err := suite.client.FetchManifestWithContext(ctx, testCid)
+	require.Error(suite.T(), err, "Expected context cancellation error")
+	assert.Nil(suite.T(), manifest, "Expected nil manifest on cancellation")
 
 	// Accept either canceled or deadline exceeded depending on timing
 	if !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
 		// net/http may wrap the context error; check error string as a fallback
 		es := err.Error()
 		if !(es == context.Canceled.Error() || es == context.DeadlineExceeded.Error()) {
-			t.Fatalf("expected context cancellation, got: %v", err)
+			suite.T().Fatalf("expected context cancellation, got: %v", err)
 		}
 	}
 }
