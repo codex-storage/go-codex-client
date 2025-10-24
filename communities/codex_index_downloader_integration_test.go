@@ -117,6 +117,10 @@ func (suite *CodexIndexDownloaderIntegrationTestSuite) TestIntegration_GotManife
 
 	// Verify Length returns the same value
 	assert.Equal(suite.T(), datasetSize, downloader.Length(), "Length() should return dataset size")
+
+	// Verify no error occurred
+	assert.NoError(suite.T(), downloader.GetError(), "No error should occur during manifest fetch")
+	suite.T().Log("✅ No errors during manifest fetch")
 }
 
 func (suite *CodexIndexDownloaderIntegrationTestSuite) TestIntegration_DownloadIndexFile() {
@@ -157,6 +161,9 @@ func (suite *CodexIndexDownloaderIntegrationTestSuite) TestIntegration_DownloadI
 	expectedSize := downloader.GetDatasetSize()
 	suite.T().Logf("Expected file size: %d bytes", expectedSize)
 
+	// Verify no error from manifest fetch
+	assert.NoError(suite.T(), downloader.GetError(), "No error should occur during manifest fetch")
+
 	// Start the download
 	downloader.DownloadIndexFile()
 
@@ -166,6 +173,14 @@ func (suite *CodexIndexDownloaderIntegrationTestSuite) TestIntegration_DownloadI
 	}, 30*time.Second, 100*time.Millisecond, "Download should complete")
 
 	suite.T().Logf("✅ Download completed: %d/%d bytes", downloader.BytesCompleted(), expectedSize)
+
+	// Verify download is marked as complete
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be marked as complete")
+	suite.T().Log("✅ Download marked as complete")
+
+	// Verify no error occurred during download
+	assert.NoError(suite.T(), downloader.GetError(), "No error should occur during download")
+	suite.T().Log("✅ No errors during download")
 
 	// Verify file exists and has correct size
 	stat, err := os.Stat(filePath)

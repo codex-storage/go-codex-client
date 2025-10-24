@@ -45,8 +45,8 @@ func (suite *CodexIndexDownloaderTestSuite) SetupTest() {
 	// Create a fresh cancel channel for each test
 	suite.cancelChan = make(chan struct{})
 
-	// Create logger
-	suite.logger, _ = zap.NewDevelopment()
+	// Use NOP logger for unit tests (no output noise)
+	suite.logger = zap.NewNop()
 }
 
 // TearDownTest runs after each test method
@@ -110,6 +110,9 @@ func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_SuccessClosesChannel
 
 	// Verify dataset size was recorded
 	assert.Equal(suite.T(), int64(1024), downloader.GetDatasetSize(), "Dataset size should be recorded")
+
+	// Verify no error was recorded
+	assert.NoError(suite.T(), downloader.GetError(), "No error should be recorded on success")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_ErrorDoesNotCloseChannel() {
@@ -138,6 +141,14 @@ func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_ErrorDoesNotCloseCha
 
 	// Verify dataset size was NOT recorded (should be 0)
 	assert.Equal(suite.T(), int64(0), downloader.GetDatasetSize(), "Dataset size should be 0 on error")
+
+	// Verify download is not complete
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Download should not be complete on error")
+
+	// Verify error was recorded
+	assert.Error(suite.T(), downloader.GetError(), "Error should be recorded")
+	assert.Contains(suite.T(), downloader.GetError().Error(), "fetch error", "Error message should contain fetch error")
+	suite.T().Log("✅ Error was recorded correctly")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_CidMismatchDoesNotCloseChannel() {
@@ -172,6 +183,14 @@ func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_CidMismatchDoesNotCl
 
 	// Verify dataset size was NOT recorded (should be 0)
 	assert.Equal(suite.T(), int64(0), downloader.GetDatasetSize(), "Dataset size should be 0 on CID mismatch")
+
+	// Verify download is not complete
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Download should not be complete on CID mismatch")
+
+	// Verify error was recorded
+	assert.Error(suite.T(), downloader.GetError(), "Error should be recorded for CID mismatch")
+	assert.Contains(suite.T(), downloader.GetError().Error(), "CID mismatch", "Error message should mention CID mismatch")
+	suite.T().Log("✅ Error was recorded for CID mismatch")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_Cancellation() {
@@ -218,6 +237,14 @@ func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_Cancellation() {
 
 	// Verify dataset size was NOT recorded
 	assert.Equal(suite.T(), int64(0), downloader.GetDatasetSize(), "Dataset size should be 0 on cancellation")
+
+	// Verify download is not complete
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Download should not be complete on cancellation")
+
+	// Verify error was recorded (context cancellation)
+	assert.Error(suite.T(), downloader.GetError(), "Error should be recorded for cancellation")
+	assert.ErrorIs(suite.T(), downloader.GetError(), context.Canceled, "Error should be context.Canceled")
+	suite.T().Log("✅ Cancellation error was recorded correctly")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_RecordsDatasetSize() {
@@ -256,6 +283,9 @@ func (suite *CodexIndexDownloaderTestSuite) TestGotManifest_RecordsDatasetSize()
 	// Verify dataset size was recorded correctly
 	assert.Equal(suite.T(), expectedSize, downloader.GetDatasetSize(), "Dataset size should match manifest")
 	suite.T().Logf("✅ Dataset size correctly recorded: %d", downloader.GetDatasetSize())
+
+	// Verify no error was recorded
+	assert.NoError(suite.T(), downloader.GetError(), "No error should be recorded on success")
 }
 
 // ==================== DownloadIndexFile Tests ====================
@@ -279,20 +309,35 @@ func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_StoresFileCorr
 	// Start download
 	downloader.DownloadIndexFile()
 
-	// Wait for download to complete (check file existence and size)
+	// Wait for download to complete (check bytes completed first, then file existence)
 	require.Eventually(suite.T(), func() bool {
+		// First check: all bytes downloaded
+		if downloader.BytesCompleted() != int64(len(testData)) {
+			return false
+		}
+		// Second check: download marked as complete (file renamed)
+		if !downloader.IsDownloadComplete() {
+			return false
+		}
+		// Third check: file actually exists with correct size
 		stat, err := os.Stat(filePath)
 		if err != nil {
 			return false
 		}
 		return stat.Size() == int64(len(testData))
-	}, 2*time.Second, 50*time.Millisecond, "File should be created with correct size")
+	}, 2*time.Second, 50*time.Millisecond, "File should be fully downloaded and saved")
 
 	// Verify file contents
 	actualData, err := os.ReadFile(filePath)
 	require.NoError(suite.T(), err, "Should be able to read downloaded file")
 	assert.Equal(suite.T(), testData, actualData, "File contents should match")
 	suite.T().Logf("✅ File downloaded successfully to: %s", filePath)
+
+	// Verify download is complete
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete")
+
+	// Verify no error was recorded
+	assert.NoError(suite.T(), downloader.GetError(), "No error should be recorded on successful download")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_TracksProgress() {
@@ -342,6 +387,12 @@ func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_TracksProgress
 
 	assert.Equal(suite.T(), int64(len(testData)), downloader.BytesCompleted(), "All bytes should be downloaded")
 	suite.T().Logf("✅ Download progress tracked correctly: %d/%d bytes", downloader.BytesCompleted(), len(testData))
+
+	// Verify download is complete
+	assert.True(suite.T(), downloader.IsDownloadComplete(), "Download should be complete")
+
+	// Verify no error was recorded
+	assert.NoError(suite.T(), downloader.GetError(), "No error should be recorded on successful download")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_Cancellation() {
@@ -356,7 +407,7 @@ func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_Cancellation()
 			close(downloadStarted) // Signal that download started
 
 			// Simulate slow download with cancellation check
-			for i := 0; i < 100; i++ {
+			for range 100 {
 				select {
 				case <-ctx.Done():
 					return ctx.Err() // Return cancellation error
@@ -396,6 +447,20 @@ func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_Cancellation()
 	bytesCompleted := downloader.BytesCompleted()
 	suite.T().Logf("✅ Download cancelled after %d bytes (should be < 100)", bytesCompleted)
 	assert.Less(suite.T(), bytesCompleted, int64(100), "Download should be cancelled before completing all 100 bytes")
+
+	// Verify download is not complete
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Download should not be complete on cancellation")
+
+	// Verify error was recorded (context cancellation)
+	assert.Error(suite.T(), downloader.GetError(), "Error should be recorded for cancellation")
+	assert.ErrorIs(suite.T(), downloader.GetError(), context.Canceled, "Error should be context.Canceled")
+	suite.T().Log("✅ Cancellation error was recorded correctly")
+
+	// Verify that the target file does NOT exist (atomic write should clean up temp file on cancellation)
+	_, err := os.Stat(filePath)
+	assert.True(suite.T(), os.IsNotExist(err), "Target file should not exist after cancellation")
+	suite.T().Log("✅ Target file does not exist after cancellation (temp file cleaned up)")
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "✅ IsDownloadComplete should be false after cancellation")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_ErrorHandling() {
@@ -420,13 +485,19 @@ func (suite *CodexIndexDownloaderTestSuite) TestDownloadIndexFile_ErrorHandling(
 	assert.Equal(suite.T(), int64(0), downloader.BytesCompleted(), "No bytes should be recorded on error")
 	suite.T().Log("✅ Error handling: no bytes recorded on download failure")
 
-	// File should exist but be empty (or not exist if creation failed)
-	// This is current behavior - we might want to improve it to clean up on error
-	if stat, err := os.Stat(filePath); err == nil {
-		suite.T().Logf("File exists with size: %d bytes (current behavior)", stat.Size())
-	} else {
-		suite.T().Log("File does not exist (current behavior)")
-	}
+	// Verify download is not complete
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "Download should not be complete on error")
+
+	// Verify error was recorded
+	assert.Error(suite.T(), downloader.GetError(), "Error should be recorded")
+	assert.Contains(suite.T(), downloader.GetError().Error(), "download failed", "Error message should contain download failed")
+	suite.T().Log("✅ Error was recorded correctly")
+
+	// Verify that the target file does NOT exist (atomic write should clean up temp file)
+	_, err := os.Stat(filePath)
+	assert.True(suite.T(), os.IsNotExist(err), "Target file should not exist on download error")
+	suite.T().Log("✅ Target file does not exist after download error (temp file cleaned up)")
+	assert.False(suite.T(), downloader.IsDownloadComplete(), "✅ IsDownloadComplete should be false after cancellation")
 }
 
 func (suite *CodexIndexDownloaderTestSuite) TestLength_ReturnsDatasetSize() {
