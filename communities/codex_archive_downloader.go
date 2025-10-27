@@ -200,6 +200,7 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 					delete(d.archiveDownloadCancel, hash)
 				}
 				d.cancelled = true
+				d.downloadComplete = true // Mark as complete even on cancellation
 				d.mu.Unlock()
 				return // Exit goroutine after cancellation
 			case <-ticker.C:
