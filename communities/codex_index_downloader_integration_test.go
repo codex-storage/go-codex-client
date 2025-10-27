@@ -1,5 +1,5 @@
-//go:build integration
-// +build integration
+//go:build codex_integration
+// +build codex_integration
 
 package communities_test
 

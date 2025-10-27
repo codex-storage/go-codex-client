@@ -1,5 +1,6 @@
 {
+  "go.testTags": "codex_integration",
   "gopls": {
-    "buildFlags": ["-tags=integration"]
+    "buildFlags": ["-tags=codex_integration"]
   }
 }
