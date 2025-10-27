@@ -168,6 +168,101 @@ you will need to regenerate some artifacts. There are two:
 - the protobuf
 - the mocks
 
+For the first one - protobuf - you need two components:
+1. **`protoc`** - the Protocol Buffer compiler itself
+2. **`protoc-gen-go`** - the Go plugin for protoc that generates `.pb.go` files
+
+#### Installing protoc
+
+I have followed the instructions from [Protocol Buffer Compiler Installation](https://protobuf.dev/installation/).
+
+The following bash script (Arch Linux) can come in handy:
+
+```bash
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+echo "installing go..."
+
+sudo pacman -S --noconfirm --needed go
+
+echo "installing go protoc compiler"
+
+PB_REL="https://github.com/protocolbuffers/protobuf/releases"
+VERSION="32.1"
+FILE="protoc-${VERSION}-linux-x86_64.zip"
+
+# 1. create a temp dir
+TMP_DIR="$(mktemp -d)"
+
+# ensure cleanup on exit
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+echo "Created temp dir: $TMP_DIR"
+
+# 2. download file into temp dir
+curl -L -o "$TMP_DIR/$FILE" "$PB_REL/download/v$VERSION/$FILE"
+
+# 3. unzip into ~/.local/share/go
+mkdir -p "$HOME/.local/share/go"
+unzip -o "$TMP_DIR/$FILE" -d "$HOME/.local/share/go"
+
+# 4. cleanup handled automatically by trap
+echo "protoc $VERSION installed into $HOME/.local/share/go"
+```
+
+After that make sure that `$HOME/.local/share/go/bin` is in your path, and you should get:
+
+```bash
+protoc --version
+libprotoc 32.1
+```
+
+#### Installing protoc-gen-go
+
+The `protoc-gen-go` plugin is required to generate Go code from `.proto` files. 
+Install it with:
+
+```bash
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.1
+```
+
+Make sure `$(go env GOPATH)/bin` is in your `$PATH` so protoc can find the plugin.
+
+Verify the installation:
+
+```bash
+which protoc-gen-go
+protoc-gen-go --version
+# Should output: protoc-gen-go v1.34.1
+```
+
+#### Installing mockgen
+
+In order to regenerate mocks you will need `mockgen`.
+
+You can install it with:
+
+```bash
+go install go.uber.org/mock/mockgen
+```
+
+> Also make sure you have `$(go env GOPATH)/bin` in your PATH. Otherwise
+make sure you have something like `export PATH="$PATH:$(go env GOPATH)/bin"` 
+in your `~/.bashrc` (adjusted to your SHELL and OS version). 
+This should be part of your standard GO installation.
+
+If everything works well, you should see something like:
+
+```bash
+❯ which mockgen && mockgen -version
+/home/<your-user-name>/go/bin/mockgen
+v0.6.0
+```
+
+If everything seems to be under control, we can now proceed with actual generation.
+
 The easiest way is to regenerate all in one go:
 
 ```bash
