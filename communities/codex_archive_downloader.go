@@ -147,6 +147,10 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 
 	var archivesList []archiveInfo
 	for hash, metadata := range d.index.Archives {
+		// Skip archives we already have
+		if slices.Contains(d.existingArchiveIDs, hash) {
+			continue
+		}
 		archivesList = append(archivesList, archiveInfo{
 			hash: hash,
 			from: metadata.Metadata.From,
@@ -165,6 +169,17 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 		}
 		return 0 // equal timestamps
 	})
+
+	// Pre-populate archiveDownloadCancel with all archives that need downloading
+	// This ensures len(archiveDownloadCancel) correctly represents total pending work
+	// and prevents race condition where fast-completing goroutines set downloadComplete=true
+	// before all archives are added to the map
+	d.mu.Lock()
+	for _, archive := range archivesList {
+		d.archiveDownloadCancel[archive.hash] = make(chan struct{})
+		d.archiveDownloadProgress[archive.hash] = 0
+	}
+	d.mu.Unlock()
 
 	// Monitor for cancellation in a separate goroutine
 	go func() {
@@ -202,18 +217,10 @@ func (d *CodexArchiveDownloader) downloadAllArchives() {
 
 	// Download each missing archive
 	for _, archive := range archivesList {
-		// Check if we already have this archive
-		hasArchive := slices.Contains(d.existingArchiveIDs, archive.hash)
-		if hasArchive {
-			continue
-		}
-
-		archiveCancelChan := make(chan struct{})
-
-		d.mu.Lock()
-		d.archiveDownloadProgress[archive.hash] = 0
-		d.archiveDownloadCancel[archive.hash] = archiveCancelChan
-		d.mu.Unlock()
+		// Get the pre-created cancel channel for this archive
+		d.mu.RLock()
+		archiveCancelChan := d.archiveDownloadCancel[archive.hash]
+		d.mu.RUnlock()
 
 		// Call callback before starting
 		if d.onStartingArchiveDownload != nil {
