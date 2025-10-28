@@ -24,14 +24,13 @@ fetch:
 	unzip -o -qq $(LIBS_DIR)/codex-${OS}-${ARCH}.zip -d $(LIBS_DIR)
 	rm -f $(LIBS_DIR)/*.zip
 
-build:
-	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go build -o $(BIN_NAME) main.go
-
 build-upload:
 	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go build -o bin/codex-upload ./cmd/upload
 
 build-download:
 	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go build -o bin/codex-download ./cmd/download
+
+build: build-upload build-download
 
 test:
 	@echo "Running unit tests..."
@@ -40,6 +39,10 @@ test:
 test-integration:
 	@echo "Running tests..."
 	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go  test -v -tags=codex_integration ./communities -run Integration -timeout 15s
+
+coverage: 
+	@echo "Running unit tests with coverage..."
+	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go test -coverprofile=coverage.out ./communities
 
 clean:
 	rm -f $(BIN_NAME)
