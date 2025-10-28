@@ -11,11 +11,11 @@ package mock_communities
 
 import (
 	context "context"
-	communities "go-codex-client/communities"
 	io "io"
 	reflect "reflect"
 	time "time"
 
+	"github.com/codex-storage/codex-go-bindings/codex"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -72,10 +72,10 @@ func (mr *MockCodexClientInterfaceMockRecorder) DownloadWithContext(ctx, cid, ou
 }
 
 // FetchManifestWithContext mocks base method.
-func (m *MockCodexClientInterface) FetchManifestWithContext(ctx context.Context, cid string) (*communities.CodexManifest, error) {
+func (m *MockCodexClientInterface) FetchManifestWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchManifestWithContext", ctx, cid)
-	ret0, _ := ret[0].(*communities.CodexManifest)
+	ret0, _ := ret[0].(codex.Manifest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -156,10 +156,10 @@ func (mr *MockCodexClientInterfaceMockRecorder) SetRequestTimeout(timeout any) *
 }
 
 // TriggerDownload mocks base method.
-func (m *MockCodexClientInterface) TriggerDownload(cid string) (*communities.CodexManifest, error) {
+func (m *MockCodexClientInterface) TriggerDownload(cid string) (codex.Manifest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TriggerDownload", cid)
-	ret0, _ := ret[0].(*communities.CodexManifest)
+	ret0, _ := ret[0].(codex.Manifest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -171,10 +171,10 @@ func (mr *MockCodexClientInterfaceMockRecorder) TriggerDownload(cid any) *gomock
 }
 
 // TriggerDownloadWithContext mocks base method.
-func (m *MockCodexClientInterface) TriggerDownloadWithContext(ctx context.Context, cid string) (*communities.CodexManifest, error) {
+func (m *MockCodexClientInterface) TriggerDownloadWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TriggerDownloadWithContext", ctx, cid)
-	ret0, _ := ret[0].(*communities.CodexManifest)
+	ret0, _ := ret[0].(codex.Manifest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

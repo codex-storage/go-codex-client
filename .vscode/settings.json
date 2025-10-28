@@ -1,6 +1,13 @@
 {
   "go.testTags": "codex_integration",
   "gopls": {
-    "buildFlags": ["-tags=codex_integration"]
+    "buildFlags": [
+      "-tags=integration"
+    ]
+  },
+  "go.toolsEnvVars": {
+    "CGO_ENABLED": "1",
+    "CGO_CFLAGS": "-I${workspaceFolder}/libs",
+    "CGO_LDFLAGS": "-L${workspaceFolder}/libs -lcodex -Wl,-rpath,${workspaceFolder}/libs"
   }
 }

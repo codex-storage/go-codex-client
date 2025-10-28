@@ -30,23 +30,12 @@ type CodexIndexDownloaderIntegrationTestSuite struct {
 	suite.Suite
 	client  *communities.CodexClient
 	testDir string
-	host    string
-	port    string
 	logger  *zap.Logger
 }
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexIndexDownloaderIntegrationTestSuite) SetupSuite() {
-	suite.host = communities.GetEnvOrDefault("CODEX_HOST", "localhost")
-	suite.port = communities.GetEnvOrDefault("CODEX_API_PORT", "8001")
-	suite.client = communities.NewCodexClient(suite.host, suite.port)
-
-	// Optional request timeout override
-	if ms := os.Getenv("CODEX_TIMEOUT_MS"); ms != "" {
-		if d, err := time.ParseDuration(ms + "ms"); err == nil {
-			suite.client.SetRequestTimeout(d)
-		}
-	}
+	suite.client = communities.NewCodexClientTest(suite.T())
 
 	// Create logger
 	suite.logger, _ = zap.NewDevelopment()
