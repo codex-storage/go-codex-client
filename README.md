@@ -77,9 +77,9 @@ SHA2-256(output.bin)= c74ce73165c288348b168baffc477b6db38af3c629b42a7725c35d99d4
 
 ### Running tests
 
-There are a couple of basic tests, including one integration test.
+We have some unit tests and a couple of integration tests.
 
-In this section we focus on unit test. The integration tests are covered in the
+In this section we focus on the unit tests. The integration tests are covered in the
 next section.
 
 To run all unit tests:
