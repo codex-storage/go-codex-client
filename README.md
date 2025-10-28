@@ -79,41 +79,29 @@ SHA2-256(output.bin)= c74ce73165c288348b168baffc477b6db38af3c629b42a7725c35d99d4
 
 There are a couple of basic tests, including one integration test.
 
-To run the unit tests:
+In this section we focus on unit test. The integration tests are covered in the
+next section.
+
+To run all unit tests:
 
 ```bash
-❯ go test -v ./communities
-=== RUN   TestUpload_Success
---- PASS: TestUpload_Success (0.00s)
-=== RUN   TestDownload_Success
---- PASS: TestDownload_Success (0.00s)
-=== RUN   TestDownloadWithContext_Cancel
---- PASS: TestDownloadWithContext_Cancel (0.04s)
-PASS
-ok  	go-codex-client/communities	0.044s
+❯ go test -v ./communities -count 1
 ```
 
-To run the integration test, use `integration` tag and narrow the scope using `-run Integration`:
+To be more selective, e.g. in order to run all the tests from 
+`CodexArchiveDownloaderSuite`, run:
 
 ```bash
-go test -v -tags=integration ./communities -run Integration -timeout 15s
+go test -v ./communities -run CodexArchiveDownloader -count 1
 ```
 
-To make sure that the test is actually run and not cached, use `count` option:
+or for an individual test from that suite:
 
 ```bash
-go test -v -tags=integration ./communities -run Integration -timeout 15s -count 1
+go test -v ./communities -run TestCodexArchiveDownloaderSuite/TestCancellationDuringPolling -count 1
 ```
-
-### Using gotestsum to run the tests
 
 You can also use `gotestsum` to run the tests (you may need to install it first, e.g. `go install gotest.tools/gotestsum@v1.13.0`):
-
-```bash
-gotestsum --packages="./communities" -f testname --rerun-fails -- -run "TestCodexArchiveDownloaderSuite" -count 1
-```
-
-or to run all tests (including CodexClient tests):
 
 ```bash
 gotestsum --packages="./communities" -f testname --rerun-fails -- -count 1
@@ -122,8 +110,29 @@ gotestsum --packages="./communities" -f testname --rerun-fails -- -count 1
 For a more verbose output including logs use `-f standard-verbose`, e.g.:
 
 ```bash
-gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -run "TestCodexArchiveDownloaderSuite" -v -count 1
+gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -v -count 1
 ```
+
+To be more selective, e.g. in order to run all the tests from 
+`CodexArchiveDownloaderSuite`, run:
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run CodexArchiveDownloader -count 1
+```
+
+or for an individual test from that suite:
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run TestCodexArchiveDownloaderSuite/TestCancellationDuringPolling -count 1
+```
+
+Notice, that the `-run` flag accepts a regular expression that matches against the full test path, so you can be more concise in naming if necessary, e.g.:
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run CodexArchiveDownloader/Cancellation -count 1
+```
+
+This also applies to native `go test` command.
 
 ### Running integration tests
 
@@ -145,16 +154,41 @@ To start Codex client, use e.g.:
 ./build/codex --data-dir=./data-1 --listen-addrs=/ip4/127.0.0.1/tcp/8081 --api-port=8001 --nat=none --disc-port=8091 --log-level=TRACE
 ```
 
-Then to run archive downloader integration tests:
+To run the integration test, use `codex_integration` tag and narrow the scope using `-run Integration`:
 
 ```bash
-CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=integration -run "TestCodexArchiveDownloaderIntegrationSuite" -v -count 1
+CODEX_API_PORT=8001 go test -v -tags=codex_integration ./communities -run Integration -timeout 15s
 ```
 
-or to run all integration tests:
+This will run all integration tests, including CodexClient integration tests.
+
+To make sure that the test is actually run and not cached, use `count` option:
 
 ```bash
-CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=integration -v -count 1 -run Integration
+CODEX_API_PORT=8001 go test -v -tags=codex_integration ./communities -run Integration -timeout 15s -count 1
+```
+
+To be more specific and only run the tests related to, e.g. index downloader or archive
+downloader you can use:
+
+```bash
+CODEX_API_PORT=8001 go test -v -tags=codex_integration ./communities -run CodexIndexDownloaderIntegration -timeout 15s -count 1
+
+CODEX_API_PORT=8001 go test -v -tags=codex_integration ./communities -run CodexArchiveDownloaderIntegration -timeout 15s -count 1
+```
+
+and then, if you prefer to use `gotestsum`:
+
+```bash
+CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=codex_integration -run CodexIndexDownloaderIntegration -v -count 1
+
+CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=codex_integration -run CodexArchiveDownloaderIntegration -v -count 1
+```
+
+or to run all integration tests (including CodexClient integration tests):
+
+```bash
+CODEX_API_PORT=8001 gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -tags=codex_integration -v -count 1 -run Integration
 ```
 
 I prefer to be more selective when running integration tests.
