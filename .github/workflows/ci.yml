@@ -53,7 +53,7 @@ jobs:
 
     - name: Check test coverage for communities package
       run: |
-        go test -coverprofile=coverage.out ./communities
+        make coverage
         go tool cover -func=coverage.out
     
     - name: Upload coverage reports
