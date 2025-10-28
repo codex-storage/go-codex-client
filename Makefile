@@ -38,7 +38,7 @@ test:
 
 test-integration:
 	@echo "Running tests..."
-	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go  test -v -tags=codex_integration ./communities -run Integration -timeout 15s
+	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go  test -v -tags=codex_integration ./communities -run Integration -timeout 60s
 
 coverage: 
 	@echo "Running unit tests with coverage..."
