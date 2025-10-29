@@ -11,11 +11,10 @@ package mock_communities
 
 import (
 	context "context"
+	codexmanifest "go-codex-client/codexmanifest"
 	io "io"
 	reflect "reflect"
-	time "time"
 
-	"github.com/codex-storage/codex-go-bindings/codex"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -72,10 +71,10 @@ func (mr *MockCodexClientInterfaceMockRecorder) DownloadWithContext(ctx, cid, ou
 }
 
 // FetchManifestWithContext mocks base method.
-func (m *MockCodexClientInterface) FetchManifestWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
+func (m *MockCodexClientInterface) FetchManifestWithContext(ctx context.Context, cid string) (codexmanifest.CodexManifest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchManifestWithContext", ctx, cid)
-	ret0, _ := ret[0].(codex.Manifest)
+	ret0, _ := ret[0].(codexmanifest.CodexManifest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -143,23 +142,11 @@ func (mr *MockCodexClientInterfaceMockRecorder) RemoveCid(cid any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveCid", reflect.TypeOf((*MockCodexClientInterface)(nil).RemoveCid), cid)
 }
 
-// SetRequestTimeout mocks base method.
-func (m *MockCodexClientInterface) SetRequestTimeout(timeout time.Duration) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetRequestTimeout", timeout)
-}
-
-// SetRequestTimeout indicates an expected call of SetRequestTimeout.
-func (mr *MockCodexClientInterfaceMockRecorder) SetRequestTimeout(timeout any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRequestTimeout", reflect.TypeOf((*MockCodexClientInterface)(nil).SetRequestTimeout), timeout)
-}
-
 // TriggerDownload mocks base method.
-func (m *MockCodexClientInterface) TriggerDownload(cid string) (codex.Manifest, error) {
+func (m *MockCodexClientInterface) TriggerDownload(cid string) (codexmanifest.CodexManifest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TriggerDownload", cid)
-	ret0, _ := ret[0].(codex.Manifest)
+	ret0, _ := ret[0].(codexmanifest.CodexManifest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -171,10 +158,10 @@ func (mr *MockCodexClientInterfaceMockRecorder) TriggerDownload(cid any) *gomock
 }
 
 // TriggerDownloadWithContext mocks base method.
-func (m *MockCodexClientInterface) TriggerDownloadWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
+func (m *MockCodexClientInterface) TriggerDownloadWithContext(ctx context.Context, cid string) (codexmanifest.CodexManifest, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "TriggerDownloadWithContext", ctx, cid)
-	ret0, _ := ret[0].(codex.Manifest)
+	ret0, _ := ret[0].(codexmanifest.CodexManifest)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

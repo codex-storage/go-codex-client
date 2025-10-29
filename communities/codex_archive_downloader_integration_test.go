@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
+	"go-codex-client/codexclient"
 	"go-codex-client/communities"
 	"go-codex-client/protobuf"
 )
@@ -25,14 +26,14 @@ import (
 // against a real Codex instance
 type CodexArchiveDownloaderIntegrationSuite struct {
 	suite.Suite
-	client       *communities.CodexClient
+	client       communities.CodexClientInterface
 	uploadedCIDs []string // Track uploaded CIDs for cleanup
 }
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexArchiveDownloaderIntegrationSuite) SetupSuite() {
 	var err error
-	suite.client, err = communities.NewCodexClient(codex.Config{
+	suite.client, err = codexclient.NewCodexClient(codex.Config{
 		LogFormat:      codex.LogFormatNoColors,
 		MetricsEnabled: false,
 		BlockRetries:   5,

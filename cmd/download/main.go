@@ -7,7 +7,7 @@ import (
 	"os"
 	"path"
 
-	"go-codex-client/communities" // Import the local communities package
+	"go-codex-client/codexclient"
 
 	"github.com/codex-storage/codex-go-bindings/codex"
 )
@@ -25,7 +25,7 @@ func main() {
 	}
 
 	// Create Codex client
-	client, err := communities.NewCodexClient(codex.Config{
+	client, err := codexclient.NewCodexClient(codex.Config{
 		LogFormat:      codex.LogFormatNoColors,
 		MetricsEnabled: false,
 		BlockRetries:   5,

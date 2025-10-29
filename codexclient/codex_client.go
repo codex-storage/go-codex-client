@@ -1,16 +1,20 @@
-/* Package communities
+/* Package codexclientpackage codexclient
+
 *
 * Provides a CodexClient type that you can use to conveniently
 * upload buffers to Codex.
 *
  */
-package communities
+
+package codexclient
 
 import (
 	"bytes"
 	"context"
 	"fmt"
 	"io"
+
+	"go-codex-client/codexmanifest"
 
 	"github.com/codex-storage/codex-go-bindings/codex"
 )
@@ -58,7 +62,7 @@ func (c *CodexClient) Download(cid string, output io.Writer) error {
 	return c.DownloadWithContext(context.Background(), cid, output)
 }
 
-func (c *CodexClient) TriggerDownload(cid string) (codex.Manifest, error) {
+func (c *CodexClient) TriggerDownload(cid string) (codexmanifest.CodexManifest, error) {
 	return c.TriggerDownloadWithContext(context.Background(), cid)
 }
 
@@ -89,12 +93,34 @@ func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string, 
 	return c.LocalDownload(cid, output)
 }
 
-func (c *CodexClient) FetchManifestWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
-	return c.node.DownloadManifest(cid)
+func (c *CodexClient) FetchManifestWithContext(ctx context.Context, cid string) (codexmanifest.CodexManifest, error) {
+	manifest, err := c.node.DownloadManifest(cid)
+	if err != nil {
+		return codexmanifest.CodexManifest{}, err
+	}
+	return codexmanifest.CodexManifest{
+		Cid:         manifest.Cid,
+		TreeCid:     manifest.TreeCid,
+		DatasetSize: manifest.DatasetSize,
+		BlockSize:   manifest.BlockSize,
+		Filename:    manifest.Filename,
+		Mimetype:    manifest.Mimetype,
+	}, nil
 }
 
-func (c *CodexClient) TriggerDownloadWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
-	return c.node.Fetch(cid)
+func (c *CodexClient) TriggerDownloadWithContext(ctx context.Context, cid string) (codexmanifest.CodexManifest, error) {
+	manifest, err := c.node.Fetch(cid)
+	if err != nil {
+		return codexmanifest.CodexManifest{}, err
+	}
+	return codexmanifest.CodexManifest{
+		Cid:         manifest.Cid,
+		TreeCid:     manifest.TreeCid,
+		DatasetSize: manifest.DatasetSize,
+		BlockSize:   manifest.BlockSize,
+		Filename:    manifest.Filename,
+		Mimetype:    manifest.Mimetype,
+	}, nil
 }
 
 // UploadArchive is a convenience method for uploading archive data

@@ -1,4 +1,7 @@
-package communities_test
+//go:build codex_integration
+// +build codex_integration
+
+package codexclient_test
 
 import (
 	"bytes"
@@ -12,10 +15,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	"go-codex-client/communities"
+	"go-codex-client/codexclient"
+	"go-codex-client/codextestutils"
 )
 
-func upload(client communities.CodexClient, t *testing.T, buf *bytes.Buffer) string {
+func upload(client codexclient.CodexClient, t *testing.T, buf *bytes.Buffer) string {
 	filename := "hello.txt"
 	cid, err := client.Upload(buf, filename)
 	if err != nil {
@@ -32,12 +36,12 @@ func upload(client communities.CodexClient, t *testing.T, buf *bytes.Buffer) str
 // CodexClientTestSuite demonstrates testify's suite functionality for CodexClient tests
 type CodexClientTestSuite struct {
 	suite.Suite
-	client *communities.CodexClient
+	client *codexclient.CodexClient
 }
 
 // SetupTest runs before each test method
 func (suite *CodexClientTestSuite) SetupTest() {
-	suite.client = NewCodexClientTest(suite.T())
+	suite.client = codextestutils.NewCodexClientTest(suite.T())
 }
 
 // TearDownTest runs after each test method
