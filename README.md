@@ -10,11 +10,10 @@ A lightweight Go client utility for interacting with Codex client.
 
 We will be running codex client, and then use a small testing utility to check if the low level abstraction - CodexClient - correctly uploads and downloads the content.
 
-### Integration Codex library
+### Integration with Codex library
 
 You need to download the library file by using: 
-
-```sh
+bash
 make fetch
 ```
 
@@ -88,6 +87,66 @@ To run the integration test, use `test-integration`:
 ```bash
 make test-integration
 ```
+
+You can use your own Go test commands but you will need to export the `CGO` variables first:
+
+```bash
+export LIBS_DIR="$(realpath ./libs)"
+export CGO_CFLAGS=-I$LIBS_DIR
+export CGO_LDFLAGS="-L$LIBS_DIR -lcodex -Wl,-rpath,$LIBS_DIR"
+```
+
+Then you can use:
+
+```bash
+❯ go test -v ./communities -count 1
+```
+
+To be more selective, e.g. in order to run all the tests from
+`CodexArchiveDownloaderSuite`, run:
+
+```bash
+go test -v ./communities -run CodexArchiveDownloader -count 1
+```
+
+or for an individual test from that suite:
+
+```bash
+go test -v ./communities -run TestCodexArchiveDownloaderSuite/TestCancellationDuringPolling -count 1
+```
+
+You can also use `gotestsum` to run the tests (you may need to install it first, e.g. `go install gotest.tools/gotestsum@v1.13.0`):
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -count 1
+```
+
+For a more verbose output including logs use `-f standard-verbose`, e.g.:
+
+```bash
+gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -v -count 1
+```
+
+To be more selective, e.g. in order to run all the tests from
+`CodexArchiveDownloaderSuite`, run:
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run CodexArchiveDownloader -count 1
+```
+
+or for an individual test from that suite:
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run TestCodexArchiveDownloaderSuite/TestCancellationDuringPolling -count 1
+```
+
+Notice, that the `-run` flag accepts a regular expression that matches against the full test path, so you can be more concise in naming if necessary, e.g.:
+
+```bash
+gotestsum --packages="./communities" -f testname --rerun-fails -- -run CodexArchiveDownloader/Cancellation -count 1
+```
+
+This also applies to native `go test` command.
 
 ### Regenerating artifacts
 

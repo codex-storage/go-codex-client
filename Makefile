@@ -34,15 +34,20 @@ build: build-upload build-download
 
 test:
 	@echo "Running unit tests..."
-	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go test -v ./communities
+	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" gotestsum --packages="./communities" -f standard-verbose -- -v
+
+test-ci:
+	@echo "Running unit tests..."
+	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" gotestsum --packages="./communities" -f standard-verbose -- -race -v
 
 test-integration:
 	@echo "Running tests..."
-	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go  test -v -tags=codex_integration ./communities -run Integration -timeout 60s
+	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" gotestsum --packages="./communities" -f standard-verbose -- -tags=codex_integration -run Integration -timeout 60s
 
 coverage: 
 	@echo "Running unit tests with coverage..."
 	CGO_ENABLED=1 CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go test -coverprofile=coverage.out ./communities
+	go tool cover -func=coverage.out
 
 clean:
 	rm -f $(BIN_NAME)

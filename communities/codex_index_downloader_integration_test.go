@@ -35,7 +35,7 @@ type CodexIndexDownloaderIntegrationTestSuite struct {
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexIndexDownloaderIntegrationTestSuite) SetupSuite() {
-	suite.client = communities.NewCodexClientTest(suite.T())
+	suite.client = NewCodexClientTest(suite.T())
 
 	// Create logger
 	suite.logger, _ = zap.NewDevelopment()

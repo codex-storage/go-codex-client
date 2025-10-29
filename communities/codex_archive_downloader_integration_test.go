@@ -42,7 +42,7 @@ func (suite *CodexArchiveDownloaderIntegrationSuite) SetupSuite() {
 		suite.T().Fatalf("Failed to create CodexClient: %v", err)
 	}
 
-	suite.T().Logf("CodexClient configured for")
+	suite.T().Logf("CodexClient configured")
 }
 
 // TearDownSuite runs once after all tests in the suite

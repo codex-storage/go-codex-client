@@ -107,7 +107,7 @@ func (suite *CodexClientIntegrationTestSuite) TestIntegration_CheckNonExistingCI
 }
 
 func (suite *CodexClientIntegrationTestSuite) TestIntegration_TriggerDownload() {
-	client := communities.NewCodexClientTest(suite.T())
+	client := NewCodexClientTest(suite.T())
 
 	// Generate random payload to ensure proper round-trip verification
 	payload := make([]byte, 1024)

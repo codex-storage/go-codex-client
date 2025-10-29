@@ -2,7 +2,7 @@
   "go.testTags": "codex_integration",
   "gopls": {
     "buildFlags": [
-      "-tags=integration"
+      "-tags=codex_integration"
     ]
   },
   "go.toolsEnvVars": {

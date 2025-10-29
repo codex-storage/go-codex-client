@@ -37,7 +37,7 @@ type CodexClientTestSuite struct {
 
 // SetupTest runs before each test method
 func (suite *CodexClientTestSuite) SetupTest() {
-	suite.client = communities.NewCodexClientTest(suite.T())
+	suite.client = NewCodexClientTest(suite.T())
 }
 
 // TearDownTest runs after each test method
