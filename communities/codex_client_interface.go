@@ -3,8 +3,6 @@ package communities
 import (
 	"context"
 	"io"
-
-	"github.com/codex-storage/codex-go-bindings/codex"
 )
 
 // Mock generation instruction above will create a mock in package `mock_communities`
@@ -26,11 +24,11 @@ type CodexClientInterface interface {
 	LocalDownloadWithContext(ctx context.Context, cid string, output io.Writer) error
 
 	// Async download methods
-	TriggerDownload(cid string) (codex.Manifest, error)
-	TriggerDownloadWithContext(ctx context.Context, cid string) (codex.Manifest, error)
+	TriggerDownload(cid string) (CodexManifest, error)
+	TriggerDownloadWithContext(ctx context.Context, cid string) (CodexManifest, error)
 
 	// Manifest methods
-	FetchManifestWithContext(ctx context.Context, cid string) (codex.Manifest, error)
+	FetchManifestWithContext(ctx context.Context, cid string) (CodexManifest, error)
 
 	// CID management methods
 	HasCid(cid string) (bool, error)

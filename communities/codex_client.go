@@ -21,6 +21,9 @@ type CodexClient struct {
 	config *codex.Config
 }
 
+type CodexManifest = codex.Manifest
+type CodexConf = codex.Config
+
 // NewCodexClient creates a new Codex client
 func NewCodexClient(config codex.Config) (*CodexClient, error) {
 	node, err := codex.New(config)
@@ -58,7 +61,7 @@ func (c *CodexClient) Download(cid string, output io.Writer) error {
 	return c.DownloadWithContext(context.Background(), cid, output)
 }
 
-func (c *CodexClient) TriggerDownload(cid string) (codex.Manifest, error) {
+func (c *CodexClient) TriggerDownload(cid string) (CodexManifest, error) {
 	return c.TriggerDownloadWithContext(context.Background(), cid)
 }
 
@@ -89,11 +92,11 @@ func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string, 
 	return c.LocalDownload(cid, output)
 }
 
-func (c *CodexClient) FetchManifestWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
+func (c *CodexClient) FetchManifestWithContext(ctx context.Context, cid string) (CodexManifest, error) {
 	return c.node.DownloadManifest(cid)
 }
 
-func (c *CodexClient) TriggerDownloadWithContext(ctx context.Context, cid string) (codex.Manifest, error) {
+func (c *CodexClient) TriggerDownloadWithContext(ctx context.Context, cid string) (CodexManifest, error) {
 	return c.node.Fetch(cid)
 }
 
