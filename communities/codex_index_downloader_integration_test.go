@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
+	"go-codex-client/codextestutils"
 	"go-codex-client/communities"
 )
 
@@ -28,14 +29,14 @@ import (
 //   - CODEX_TIMEOUT_MS (optional; default: 60000)
 type CodexIndexDownloaderIntegrationTestSuite struct {
 	suite.Suite
-	client  *communities.CodexClient
+	client  communities.CodexClientInterface
 	testDir string
 	logger  *zap.Logger
 }
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexIndexDownloaderIntegrationTestSuite) SetupSuite() {
-	suite.client = NewCodexClientTest(suite.T())
+	suite.client = codextestutils.NewCodexClientTest(suite.T())
 
 	// Create logger
 	suite.logger, _ = zap.NewDevelopment()

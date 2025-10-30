@@ -1,14 +1,16 @@
-package communities_test
+//go:build codex_integration
+
+package codextestutils
 
 import (
-	"go-codex-client/communities"
+	"go-codex-client/codexclient"
 	"testing"
 
 	"github.com/codex-storage/codex-go-bindings/codex"
 )
 
-func NewCodexClientTest(t *testing.T) *communities.CodexClient {
-	client, err := communities.NewCodexClient(codex.Config{
+func NewCodexClientTest(t *testing.T) *codexclient.CodexClient {
+	client, err := codexclient.NewCodexClient(codex.Config{
 		DataDir:        t.TempDir(),
 		LogFormat:      codex.LogFormatNoColors,
 		MetricsEnabled: false,

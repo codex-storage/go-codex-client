@@ -1,7 +1,7 @@
 //go:build codex_integration
 // +build codex_integration
 
-package communities_test
+package codexclient_test
 
 import (
 	"bytes"
@@ -16,19 +16,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go-codex-client/codexclient"
+	"go-codex-client/codextestutils"
 	"go-codex-client/communities"
 )
 
 // CodexClientIntegrationTestSuite demonstrates testify's suite functionality for CodexClient integration tests
 type CodexClientIntegrationTestSuite struct {
 	suite.Suite
-	client *communities.CodexClient
+	client communities.CodexClientInterface
 }
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexClientIntegrationTestSuite) SetupSuite() {
 	var err error
-	suite.client, err = communities.NewCodexClient(codex.Config{
+	suite.client, err = codexclient.NewCodexClient(codex.Config{
 		DataDir:        suite.T().TempDir(),
 		LogFormat:      codex.LogFormatNoColors,
 		MetricsEnabled: false,
@@ -107,7 +109,7 @@ func (suite *CodexClientIntegrationTestSuite) TestIntegration_CheckNonExistingCI
 }
 
 func (suite *CodexClientIntegrationTestSuite) TestIntegration_TriggerDownload() {
-	client := NewCodexClientTest(suite.T())
+	client := codextestutils.NewCodexClientTest(suite.T())
 
 	// Generate random payload to ensure proper round-trip verification
 	payload := make([]byte, 1024)
