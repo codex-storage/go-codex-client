@@ -185,8 +185,6 @@ func (suite *CodexClientTestSuite) TestLocalDownloadWithContext_Success() {
 }
 
 func (suite *CodexClientTestSuite) TestLocalDownloadWithContext_Cancellation() {
-	suite.T().Skip("Wait for cancellation support PR to be merged in codex-go-bindings")
-
 	len := 1024 * 1024 * 50
 	buf := bytes.NewBuffer(make([]byte, len))
 	cid := upload(*suite.client, suite.T(), buf)

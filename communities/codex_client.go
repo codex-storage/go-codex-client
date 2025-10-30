@@ -51,7 +51,7 @@ func (c CodexClient) Destroy() error {
 
 // Upload uploads data from a reader to Codex and returns the CID
 func (c *CodexClient) Upload(data io.Reader, filename string) (string, error) {
-	return c.node.UploadReader(codex.UploadOptions{
+	return c.node.UploadReader(context.Background(), codex.UploadOptions{
 		Filepath: filename,
 	}, data)
 }
@@ -76,20 +76,20 @@ func (c *CodexClient) RemoveCid(cid string) error {
 
 // DownloadWithContext downloads data from Codex by CID with cancellation support
 func (c *CodexClient) DownloadWithContext(ctx context.Context, cid string, output io.Writer) error {
-	return c.node.DownloadStream(cid, codex.DownloadStreamOptions{
+	return c.node.DownloadStream(ctx, cid, codex.DownloadStreamOptions{
 		Writer: output,
 	})
 }
 
 func (c *CodexClient) LocalDownload(cid string, output io.Writer) error {
-	return c.node.DownloadStream(cid, codex.DownloadStreamOptions{
-		Writer: output,
-		Local:  true,
-	})
+	return c.LocalDownloadWithContext(context.Background(), cid, output)
 }
 
 func (c *CodexClient) LocalDownloadWithContext(ctx context.Context, cid string, output io.Writer) error {
-	return c.LocalDownload(cid, output)
+	return c.node.DownloadStream(ctx, cid, codex.DownloadStreamOptions{
+		Writer: output,
+		Local:  true,
+	})
 }
 
 func (c *CodexClient) FetchManifestWithContext(ctx context.Context, cid string) (CodexManifest, error) {
