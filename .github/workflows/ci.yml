@@ -18,10 +18,10 @@ jobs:
       with:
         go-version: '1.23'
         cache: true
-    
+
     - name: Install gotestsum
       run: go install gotest.tools/gotestsum@latest
-    
+
     - name: Install gomock (for code generation)
       run: go install go.uber.org/mock/mockgen@latest
     
@@ -41,16 +41,22 @@ jobs:
     
     - name: Generate code (protobuf and mocks)
       run: go generate ./...
-    
+
+    - name: Fetch Codex library
+      run: make fetch
+
     - name: Build
-      run: go build -v ./...
+      run: make build
     
     - name: Run unit tests
-      run: gotestsum --packages="./communities" -f standard-verbose --rerun-fails -- -race -v -count=1
-    
+      run: make test-ci
+
+    - name: Run integration tests
+      run: make test-integration
+
     - name: Check test coverage for communities package
       run: |
-        go test -coverprofile=coverage.out ./communities
+        make coverage
         go tool cover -func=coverage.out
     
     - name: Upload coverage reports

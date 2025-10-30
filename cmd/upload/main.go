@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 
 	"go-codex-client/communities" // Import the local communities package
+
+	"github.com/codex-storage/codex-go-bindings/codex"
 )
 
 func main() {
 	var (
-		host     = flag.String("host", "localhost", "Codex host")
-		port     = flag.String("port", "8080", "Codex port")
 		file     = flag.String("file", "test-data.bin", "File to upload")
 		filename = flag.String("name", "", "Filename to use in upload (defaults to actual filename)")
 	)
@@ -31,13 +32,33 @@ func main() {
 		uploadName = *file
 	}
 
-	fmt.Printf("Uploading %s (%d bytes) to Codex at %s:%s...\n", *file, len(data), *host, *port)
+	fmt.Printf("Uploading %s (%d bytes) to Codex...\n", *file, len(data))
 	// Create Codex client and upload
-	client := communities.NewCodexClient(*host, *port)
+	client, err := communities.NewCodexClient(codex.Config{
+		LogFormat:      codex.LogFormatNoColors,
+		MetricsEnabled: false,
+		BlockRetries:   5,
+		LogLevel:       "ERROR",
+		DataDir:        path.Join(os.TempDir(), "codex-client-data"),
+	})
+	if err != nil {
+		log.Fatalf("Failed to create CodexClient: %v", err)
+	}
+
+	if err := client.Start(); err != nil {
+		log.Fatalf("Failed to start CodexClient: %v", err)
+	}
 
 	cid, err := client.Upload(bytes.NewReader(data), uploadName)
 	if err != nil {
 		log.Fatalf("Upload failed: %v", err)
+	}
+
+	if err := client.Stop(); err != nil {
+		log.Printf("Warning: Failed to stop CodexClient: %v", err)
+	}
+	if err := client.Destroy(); err != nil {
+		log.Printf("Warning: Failed to stop CodexClient: %v", err)
 	}
 
 	fmt.Printf("✅ Upload successful!\n")
