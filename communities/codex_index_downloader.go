@@ -79,19 +79,19 @@ func (d *CodexIndexDownloader) GotManifest() <-chan struct{} {
 		}
 
 		// Verify that the CID matches our configured indexCid
-		if manifest.CID != d.indexCid {
+		if manifest.Cid != d.indexCid {
 			d.mu.Lock()
-			d.downloadError = fmt.Errorf("manifest CID mismatch: expected %s, got %s", d.indexCid, manifest.CID)
+			d.downloadError = fmt.Errorf("manifest CID mismatch: expected %s, got %s", d.indexCid, manifest.Cid)
 			d.mu.Unlock()
 			d.logger.Debug("manifest CID mismatch",
 				zap.String("expected", d.indexCid),
-				zap.String("got", manifest.CID))
+				zap.String("got", manifest.Cid))
 			return
 		}
 
 		// Store the dataset size for later use - this indicates success
 		d.mu.Lock()
-		d.datasetSize = manifest.Manifest.DatasetSize
+		d.datasetSize = int64(manifest.DatasetSize)
 		d.mu.Unlock()
 
 		// Success! Close the channel to signal completion

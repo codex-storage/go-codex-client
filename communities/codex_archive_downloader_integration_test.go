@@ -8,10 +8,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"os"
 	"testing"
 	"time"
 
+	"github.com/codex-storage/codex-go-bindings/codex"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -31,19 +31,18 @@ type CodexArchiveDownloaderIntegrationSuite struct {
 
 // SetupSuite runs once before all tests in the suite
 func (suite *CodexArchiveDownloaderIntegrationSuite) SetupSuite() {
-	// Use port 8001 as specified by the user
-	host := communities.GetEnvOrDefault("CODEX_HOST", "localhost")
-	port := communities.GetEnvOrDefault("CODEX_API_PORT", "8001")
-	suite.client = communities.NewCodexClient(host, port)
-
-	// Optional request timeout override
-	if ms := os.Getenv("CODEX_TIMEOUT_MS"); ms != "" {
-		if d, err := time.ParseDuration(ms + "ms"); err == nil {
-			suite.client.SetRequestTimeout(d)
-		}
+	var err error
+	suite.client, err = communities.NewCodexClient(codex.Config{
+		LogFormat:      codex.LogFormatNoColors,
+		MetricsEnabled: false,
+		BlockRetries:   5,
+		LogLevel:       "ERROR",
+	})
+	if err != nil {
+		suite.T().Fatalf("Failed to create CodexClient: %v", err)
 	}
 
-	suite.T().Logf("CodexClient configured for %s:%s", host, port)
+	suite.T().Logf("CodexClient configured")
 }
 
 // TearDownSuite runs once after all tests in the suite
